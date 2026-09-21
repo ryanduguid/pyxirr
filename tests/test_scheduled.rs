@@ -115,6 +115,54 @@ fn test_xirr_silent() {
 }
 
 #[rstest]
+#[case::negative([-100.0, -100.0, 1.0], 2.0 / (100.0 + 10400.0_f64.sqrt()) - 1.0)]
+#[case::positive([-100.0, 50.0, 200.0], (50.0 + 82500.0_f64.sqrt()) / 200.0 - 1.0)]
+fn test_xirr_cashflow_scale(#[case] amounts: [f64; 3], #[case] expected: f64) {
+    Python::with_gil(|py| {
+        let dates = ["2021-01-01", "2022-01-01", "2023-01-01"];
+        // Annual payments give a quadratic in q = 1 + r.
+        for scale in [1e-200, 1e-12, 1.0, 1e8, 1e200] {
+            let amounts = amounts.map(|amount| amount * scale);
+            for guess in [None, Some(-0.9)] {
+                let rate: Option<f64> =
+                    pyxirr_call!(py, "xirr", (dates, amounts), py_dict!(py, "guess" => guess));
+                let rate = rate.unwrap_or_else(|| panic!("no root at scale {scale}"));
+                assert_almost_eq!(rate, expected, 1e-12);
+            }
+        }
+    });
+}
+
+#[rstest]
+fn test_xirr_cashflow_scale_issue_75() {
+    Python::with_gil(|py| {
+        // Published de-identified payments from https://github.com/Anexen/pyxirr/issues/75.
+        let (dates, amounts) =
+            PaymentsLoader::from_csv(py, "tests/samples/cashflow_scale.csv").to_columns();
+        let amounts: Vec<f64> = amounts.extract().unwrap();
+        for divisor in [1.0, 10.0, 100.0, 1000.0, 10000.0] {
+            let amounts: Vec<_> = amounts.iter().map(|amount| amount / divisor).collect();
+            let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates.clone(), amounts));
+            // Independently checked with 60-digit decimal bisection of XNPV.
+            assert_almost_eq!(rate.unwrap(), -0.9127813822299578, 1e-12);
+        }
+    });
+}
+
+#[rstest]
+fn test_xirr_cashflow_scale_without_root() {
+    Python::with_gil(|py| {
+        let dates = ["2021-01-01", "2022-01-01", "2023-01-01"];
+        for scale in [1e-200, 1.0, 1e200] {
+            // The quadratic has a negative discriminant.
+            let amounts = [-100.0 * scale, 50.0 * scale, -100.0 * scale];
+            let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts));
+            assert!(rate.is_none(), "unexpected root {rate:?} at scale {scale}");
+        }
+    });
+}
+
+#[rstest]
 fn test_xfv() {
     // http://westclintech.com/SQL-Server-Financial-Functions/SQL-Server-XFV-function
     Python::with_gil(|py| {

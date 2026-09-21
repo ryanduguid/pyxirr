@@ -19,6 +19,11 @@ pub fn xirr(
         return Ok(xirr_analytical_2(amounts, deltas));
     }
 
+    // Scaling all payments leaves the roots unchanged and makes the solver's
+    // residual tolerances independent of the currency units.
+    let scale = amounts.iter().map(|amount| amount.abs()).fold(0.0, f64::max);
+    let amounts = &amounts.iter().map(|amount| amount / scale).collect::<Vec<_>>();
+
     let f = |rate| xnpv_result(amounts, deltas, rate);
     let fd = |rate| xnpv_result_with_deriv(amounts, deltas, rate);
 

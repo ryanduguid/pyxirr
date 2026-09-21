@@ -43,14 +43,15 @@ where
     for _ in 0..MAX_ITERATIONS {
         let (y0, y1) = fd(x);
 
-        if y0.abs() < MAX_ERROR {
+        // A small residual alone does not guarantee an accurate rate.
+        if y0 == 0.0 {
             return x;
         }
 
         let delta = y0 / y1;
 
         if delta.abs() < MAX_ERROR && y0.abs() < MAX_FX_TOL {
-            return x;
+            return x - delta;
         }
 
         x -= delta;
