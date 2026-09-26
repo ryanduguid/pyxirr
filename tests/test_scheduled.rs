@@ -103,6 +103,43 @@ fn test_xirr_samples(#[case] input: &str, #[case] expected: f64) {
 }
 
 #[rstest]
+fn test_xnpv_empty() {
+    Python::with_gil(|py| {
+        let args = (0.1, PyList::empty(py), PyList::empty(py));
+        let err = pyxirr_call_impl!(py, "xnpv", args.clone()).unwrap_err();
+        assert!(err.is_instance_of::<pyxirr::InvalidPaymentsError>(py));
+
+        let result: Option<f64> = pyxirr_call!(py, "xnpv", args, py_dict!(py, "silent" => true));
+        assert!(result.is_none());
+    })
+}
+
+#[rstest]
+fn test_xnpv_empty_vector_rates() {
+    Python::with_gil(|py| {
+        let args = (vec![0.1, 0.2], PyList::empty(py), PyList::empty(py));
+        let err = pyxirr_call_impl!(py, "xnpv", args.clone()).unwrap_err();
+        assert!(err.is_instance_of::<pyxirr::InvalidPaymentsError>(py));
+
+        let result: Vec<Option<f64>> =
+            pyxirr_call!(py, "xnpv", args, py_dict!(py, "silent" => true));
+        assert_eq!(result, vec![None, None]);
+    })
+}
+
+#[rstest]
+#[case::deposits(vec![100., 50.], 150.)]
+#[case::withdrawals(vec![-100., -50.], -150.)]
+#[case::zeros(vec![0., 0.], 0.)]
+fn test_xnpv_single_sign(#[case] amounts: Vec<f64>, #[case] expected: f64) {
+    Python::with_gil(|py| {
+        let dates = vec!["2021-01-01", "2022-01-01"];
+        let result: f64 = pyxirr_call!(py, "xnpv", (0., dates, amounts));
+        assert_almost_eq!(result, expected);
+    })
+}
+
+#[rstest]
 fn test_xirr_silent() {
     Python::with_gil(|py| {
         let args = (PyList::empty(py), PyList::empty(py));

@@ -573,11 +573,18 @@ The function raises `InvalidPaymentsError` in the following cases:
 InvalidPaymentsError: the amounts and dates arrays are of different lengths
 ```
 
-2. values array do not contain at least one negative and at least one positive value:
+2. the amounts and dates arrays are empty:
 
 ```python
->>> xnpv(0.1, [date(2020, 1, 1), date(2020, 3, 1)], [-10_000, -5750])
-InvalidPaymentsError: negative and positive payments are required
+>>> xnpv(0.1, [], [])
+InvalidPaymentsError: at least one payment is required
+```
+
+XNPV accepts payments with one sign, including all-zero payments:
+
+```python
+>>> xnpv(0.0, [date(2020, 1, 1), date(2020, 3, 1)], [-10_000, -5750])
+-15750.0
 ```
 
 ## IRR

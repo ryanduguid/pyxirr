@@ -68,14 +68,20 @@ pub fn xnpv(
     day_count: Option<DayCount>,
 ) -> Result<f64, InvalidPaymentsError> {
     validate_length(amounts, dates)?;
+    if dates.is_empty() {
+        return Err(InvalidPaymentsError::new("at least one payment is required"));
+    }
 
     let deltas = &day_count_factor(dates, day_count);
     Ok(xnpv_result(amounts, deltas, rate))
 }
 
 pub fn sign_changes(v: &[f64]) -> i32 {
-    v.windows(2)
-        .map(|p| (p[0].is_finite() && p[1].is_finite() && p[0].signum() != p[1].signum()) as i32)
+    let nonzero = v.iter().filter(|&&value| value != 0.0);
+    nonzero
+        .clone()
+        .zip(nonzero.skip(1))
+        .map(|(a, b)| (a.is_finite() && b.is_finite() && a.signum() != b.signum()) as i32)
         .sum()
 }
 
@@ -137,6 +143,10 @@ mod tests {
         assert_eq!(sign_changes(&[-1., 2., -3.]), 2);
         assert_eq!(sign_changes(&[-1., -2., -3.]), 0);
         assert_eq!(sign_changes(&[1., f64::NAN, 3.]), 0);
+        assert_eq!(sign_changes(&[-1., 0., -2., 3.]), 1);
+        assert_eq!(sign_changes(&[-1., 0., -2.]), 0);
+        assert_eq!(sign_changes(&[0., 1., -0., 2., 0.]), 0);
+        assert_eq!(sign_changes(&[0., -1., 0., 2., 0.]), 1);
     }
 
     #[rstest]
