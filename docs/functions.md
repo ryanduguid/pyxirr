@@ -24,6 +24,8 @@ CashFlowDict = Dict[DateLike, Amount]
 CashFlow = Union[CashFlowSeries, CashFlowTable, CashFlowDict]
 ```
 
+Dates must be valid calendar dates in the supported range, from year -9999 to 9999. Missing dates (`NaT`) and out-of-range NumPy or pandas dates raise `ValueError`. Numeric arrays are not date arrays. Timezone-aware pandas inputs use their local calendar date, including inside a Series or DataFrame.
+
 ## Multiple IRR problem
 
 The multiple internal rates of return problem occur when the signs of cash
@@ -76,6 +78,8 @@ year_fraction("2019-11-09", "2020-03-05", "act/360")
 
 PyXIRR defines a vectorized functions which takes a nested sequence of objects
 or numpy arrays as inputs and returns a nested sequence of results of the same shape.
+
+Nested Python sequences must be rectangular and have at most 64 dimensions. Ragged or cyclic inputs raise `ValueError`; deeper inputs raise `RecursionError`.
 
 General rules:
 
@@ -573,11 +577,18 @@ The function raises `InvalidPaymentsError` in the following cases:
 InvalidPaymentsError: the amounts and dates arrays are of different lengths
 ```
 
-2. values array do not contain at least one negative and at least one positive value:
+2. the amounts and dates arrays are empty:
 
 ```python
->>> xnpv(0.1, [date(2020, 1, 1), date(2020, 3, 1)], [-10_000, -5750])
-InvalidPaymentsError: negative and positive payments are required
+>>> xnpv(0.1, [], [])
+InvalidPaymentsError: at least one payment is required
+```
+
+XNPV accepts payments with one sign, including all-zero payments:
+
+```python
+>>> xnpv(0.0, [date(2020, 1, 1), date(2020, 3, 1)], [-10_000, -5750])
+-15750.0
 ```
 
 ## IRR

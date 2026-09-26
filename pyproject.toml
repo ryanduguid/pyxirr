@@ -1,14 +1,13 @@
 [project]
 name = "pyxirr"
 description-content-type = "text/markdown; charset=UTF-8; variant=GFM"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Topic :: Office/Business :: Financial",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -20,7 +19,7 @@ classifiers = [
 ]
 
 [build-system]
-requires = ["maturin>=1,<2"]
+requires = ["maturin>=1.15,<2"]
 build-backend = "maturin"
 
 [tool.maturin]

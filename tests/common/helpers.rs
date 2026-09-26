@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use pyo3::{ffi::c_str, prelude::*, sync::GILOnceCell, types::*};
+use pyo3::{ffi::c_str, prelude::*, sync::PyOnceLock, types::*};
 
 #[macro_export]
 macro_rules! py_dict {
@@ -97,9 +97,9 @@ macro_rules! assert_future_value {
     }};
 }
 
-static PYXIRR: GILOnceCell<Py<PyModule>> = GILOnceCell::new();
+static PYXIRR: PyOnceLock<Py<PyModule>> = PyOnceLock::new();
 
-pub fn get_pyxirr_module(py: Python<'_>) -> &Bound<PyModule> {
+pub fn get_pyxirr_module(py: Python<'_>) -> &Bound<'_, PyModule> {
     PYXIRR
         .get_or_init(py, || {
             let module = PyModule::new(py, "pyxirr").unwrap();
@@ -110,7 +110,7 @@ pub fn get_pyxirr_module(py: Python<'_>) -> &Bound<PyModule> {
 }
 
 pub fn get_pyxirr_func<'p>(py: Python<'p>, name: &str) -> Bound<'p, PyCFunction> {
-    get_pyxirr_module(py).getattr(name).unwrap().downcast_into().unwrap()
+    get_pyxirr_module(py).getattr(name).unwrap().cast_into().unwrap()
 }
 
 pub fn pd_read_csv<'p>(py: Python<'p>, input_file: &str) -> Bound<'p, PyAny> {

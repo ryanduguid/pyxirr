@@ -24,7 +24,7 @@ fn test_fv_macro_working() {
 
 #[rstest]
 fn test_fv_pmt_at_end() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let args = (0.05 / 12.0, 10.0 * 12.0, -100.0, -100.0);
         let result: f64 = pyxirr_call!(py, "fv", args);
         assert_almost_eq!(result, 15692.9288943357);
@@ -33,7 +33,7 @@ fn test_fv_pmt_at_end() {
 
 #[rstest]
 fn test_fv_pmt_at_beginning() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(
             py,
             "fv",
@@ -46,7 +46,7 @@ fn test_fv_pmt_at_beginning() {
 
 #[rstest]
 fn test_fv_zero_rate() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "fv", (0, 10 * 12, -100, -100));
         assert_almost_eq!(result, 12100.0);
     })
@@ -54,7 +54,7 @@ fn test_fv_zero_rate() {
 
 #[rstest]
 fn test_fv_vectorized() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rates = [[0.05 / 12.0, 0.06 / 12.0], [0.07 / 12.0, 0.0]];
         let result: Vec<Vec<f64>> = pyxirr_call!(py, "fv", (rates, 10 * 12, -100, -100));
 
@@ -67,7 +67,7 @@ fn test_fv_vectorized() {
 
 #[rstest]
 fn test_fv_vectorized_multi() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rates = [0.05 / 12.0, 0.06 / 12.0, 0.07 / 12.0];
         let nper = [5 * 12, 10 * 12, 12 * 12];
         let pv = [-100, -150, -200];
@@ -83,7 +83,7 @@ fn test_fv_vectorized_multi() {
 
 #[rstest]
 fn test_fv_vectorized_iterable() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let pmt = py.eval(c_str!("range(-100, -400, -100)"), None, None).unwrap();
         let actual: Vec<f64> = pyxirr_call!(py, "fv", (0.05 / 12.0, 10 * 12, pmt, -100));
         let expected = [15692.92889433575, 31221.15683890247, 46749.38478346919];
@@ -98,7 +98,7 @@ fn test_fv_vectorized_iterable() {
 fn test_fv_vectorized_ndarray() {
     // pyarray input -> pyarray output
     // pylist input -> pylist output
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rates = pyarray!(py, [[0.05 / 12.0, 0.06 / 12.0], [0.07 / 12.0, 0.0]]);
 
         let actual: Bound<PyAny> =
@@ -130,7 +130,7 @@ fn test_fv_vectorized_ndarray() {
 
 #[rstest]
 fn test_pv_pmt_at_end() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "pv", (0.05 / 12.0, 10 * 12, -100, 15692.93));
         assert_almost_eq!(result, -100.0006713162);
     })
@@ -138,7 +138,7 @@ fn test_pv_pmt_at_end() {
 
 #[rstest]
 fn test_pv_pmt_at_beginning() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(
             py,
             "pv",
@@ -151,7 +151,7 @@ fn test_pv_pmt_at_beginning() {
 
 #[rstest]
 fn test_pv_zero_rate() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "pv", (0, 10 * 12, -100, 15692.93));
         assert_almost_eq!(result, -3692.93);
     })
@@ -159,7 +159,7 @@ fn test_pv_zero_rate() {
 
 #[rstest]
 fn test_pv_default_pv() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "pv", (0.05 / 12.0, 10 * 12, -100));
         assert_almost_eq!(result, 9428.1350328234);
     })
@@ -167,7 +167,7 @@ fn test_pv_default_pv() {
 
 #[rstest]
 fn test_pv_vectorized() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rates = [[0.05 / 12.0, 0.06 / 12.0], [0.07 / 12.0, 0.0]];
         let result: Vec<Vec<f64>> = pyxirr_call!(py, "pv", (rates, 10 * 12, -100));
 
@@ -182,7 +182,7 @@ fn test_pv_vectorized() {
 
 #[rstest]
 fn test_npv_works() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let values = PyList::new(py, [-40_000., 5_000., 8_000., 12_000., 30_000.]).unwrap();
         let result: f64 = pyxirr_call!(py, "npv", (0.08, &values));
         assert_almost_eq!(result, 3065.222668179);
@@ -191,7 +191,7 @@ fn test_npv_works() {
 
 #[rstest]
 fn test_npv_start_from_zero() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let kwargs = py_dict!(py, "start_from_zero" => false);
         let values = PyList::new(py, [-40_000., 5_000., 8_000., 12_000., 30_000.]).unwrap();
         let result: f64 = pyxirr_call!(py, "npv", (0.08, &values), kwargs);
@@ -201,7 +201,7 @@ fn test_npv_start_from_zero() {
 
 #[rstest]
 fn test_npv_zero_rate() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let kwargs = py_dict!(py, "start_from_zero" => false);
         let values = PyList::new(py, [-40_000., 5_000., 8_000., 12_000., 30_000.]).unwrap();
         let result: f64 = pyxirr_call!(py, "npv", (0, &values), kwargs);
@@ -213,7 +213,7 @@ fn test_npv_zero_rate() {
 
 #[rstest]
 fn test_pmt_pmt_at_end() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let pmt: f64 = pyxirr_call!(py, "pmt", (INTEREST_RATE, PERIODS, PV));
         assert_future_value!(INTEREST_RATE, PERIODS, pmt, PV, None, None);
     })
@@ -221,7 +221,7 @@ fn test_pmt_pmt_at_end() {
 
 #[rstest]
 fn test_pmt_pmt_at_beginning() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let pmt: f64 = pyxirr_call!(
             py,
             "pmt",
@@ -234,7 +234,7 @@ fn test_pmt_pmt_at_beginning() {
 
 #[rstest]
 fn test_pmt_non_zero_fv() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let pmt: f64 = pyxirr_call!(py, "pmt", (INTEREST_RATE, PERIODS, PV, FV));
         assert_future_value!(INTEREST_RATE, PERIODS, pmt, PV, Some(FV), None);
     })
@@ -242,7 +242,7 @@ fn test_pmt_non_zero_fv() {
 
 #[rstest]
 fn test_pmt_zero_rate() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let pmt: f64 = pyxirr_call!(py, "pmt", (0, PERIODS, PV, FV));
         assert_future_value!(0.0, PERIODS, pmt, PV, Some(FV), None);
     })
@@ -250,7 +250,7 @@ fn test_pmt_zero_rate() {
 
 #[rstest]
 fn test_pmt_vec() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rates = [[0.075 / 12., 0.01 / 12.], [0.0, 0.5 / 12.]];
         let result: Vec<Vec<f64>> = pyxirr_call!(py, "pmt", (rates, 12 * 15, 200_000));
         assert_almost_eq!(result[0][0], -1854.0247200054619);
@@ -264,7 +264,7 @@ fn test_pmt_vec() {
 
 #[rstest]
 fn test_ipmt_works() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "ipmt", (INTEREST_RATE, 2.0, PERIODS, PAYMENT));
         assert_almost_eq!(result, 2301.238562586);
     })
@@ -272,7 +272,7 @@ fn test_ipmt_works() {
 
 #[rstest]
 fn test_ipmt_pmt_at_beginning() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(
             py,
             "ipmt",
@@ -285,7 +285,7 @@ fn test_ipmt_pmt_at_beginning() {
 
 #[rstest]
 fn test_ipmt_non_zero_fv() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(
             py,
             "ipmt",
@@ -298,7 +298,7 @@ fn test_ipmt_non_zero_fv() {
 
 #[rstest]
 fn test_ipmt_first_period() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "ipmt", (INTEREST_RATE, 1.0, PERIODS, PAYMENT));
         assert_almost_eq!(result, -PAYMENT * INTEREST_RATE);
     })
@@ -306,7 +306,7 @@ fn test_ipmt_first_period() {
 
 #[rstest]
 fn test_ipmt_zero_period() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: Option<f64> = pyxirr_call!(py, "ipmt", (INTEREST_RATE, 0.0, PERIODS, PAYMENT));
         assert!(result.is_none());
     })
@@ -314,7 +314,7 @@ fn test_ipmt_zero_period() {
 
 #[rstest]
 fn test_ipmt_per_greater_than_nper() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: Option<f64> =
             pyxirr_call!(py, "ipmt", (INTEREST_RATE, PERIODS + 2.0, PERIODS, PAYMENT));
         assert_eq!(result, None);
@@ -323,7 +323,7 @@ fn test_ipmt_per_greater_than_nper() {
 
 #[rstest]
 fn test_ipmt_large_power() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "ipmt", (0.1479, 297, 300, -270.51));
         assert_almost_eq!(result, 16.9656277018672);
 
@@ -342,7 +342,7 @@ fn test_ipmt_large_power() {
 
 #[rstest]
 fn test_ipmt_vec() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let per = (0..=13).collect::<Vec<_>>();
         let n = per.len();
         let result: Vec<Option<f64>> = pyxirr_call!(py, "ipmt", (0.0824 / 12., per, 12, 25_000));
@@ -374,7 +374,7 @@ fn test_ipmt_vec() {
 
 #[rstest]
 fn test_ipmt_vec_large_power() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: Vec<f64> = pyxirr_call!(
             py,
             "ipmt",
@@ -396,7 +396,7 @@ fn test_ipmt_vec_large_power() {
 
 #[rstest]
 fn test_ppmt_works() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "ppmt", (INTEREST_RATE, 2.0, PERIODS, PAYMENT));
         assert_almost_eq!(result, 4173.9901856864);
 
@@ -414,7 +414,7 @@ fn test_ppmt_works() {
 
 #[rstest]
 fn test_ppmt_zero_rate() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "ppmt", (0, 2.0, PERIODS, PAYMENT));
         assert_almost_eq!(result, 5000.);
 
@@ -427,7 +427,7 @@ fn test_ppmt_zero_rate() {
 #[rstest]
 fn test_ppmt_large_power() {
     // https://github.com/numpy/numpy-financial/issues/35
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "ppmt", (0.1479, 297, 300, -270.51));
         assert_almost_eq!(result, 23.0428012981328);
 
@@ -442,7 +442,7 @@ fn test_ppmt_large_power() {
 
 #[rstest]
 fn test_ppmt_vec() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let per = (1..6).collect::<Vec<_>>();
         let result: Vec<f64> = pyxirr_call!(py, "ppmt", (0.1 / 12., per, 24, 2000));
         let expected = [
@@ -478,7 +478,7 @@ fn test_ppmt_vec() {
 
 #[rstest]
 fn test_nper_pmt_at_end() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let nper: f64 = pyxirr_call!(py, "nper", (INTEREST_RATE, PAYMENT, PV));
         assert_future_value!(INTEREST_RATE, nper, PAYMENT, PV, None, None);
     })
@@ -486,7 +486,7 @@ fn test_nper_pmt_at_end() {
 
 #[rstest]
 fn test_nper_pmt_at_beginning() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let nper: f64 = pyxirr_call!(
             py,
             "nper",
@@ -499,7 +499,7 @@ fn test_nper_pmt_at_beginning() {
 
 #[rstest]
 fn test_nper_non_zero_fv() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let nper: f64 = pyxirr_call!(py, "nper", (INTEREST_RATE, PAYMENT, PV, FV));
         assert_future_value!(INTEREST_RATE, nper, PAYMENT, PV, Some(FV), None);
     })
@@ -507,7 +507,7 @@ fn test_nper_non_zero_fv() {
 
 #[rstest]
 fn test_nper_zero_rate() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let nper: f64 = pyxirr_call!(py, "nper", (0.0, PAYMENT, PV, FV));
         assert_future_value!(0.0, nper, PAYMENT, PV, Some(FV), None);
     })
@@ -515,7 +515,7 @@ fn test_nper_zero_rate() {
 
 #[rstest]
 fn test_nper_vec() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rates = [[[0.0]], [[0.075]]];
         let result: Vec<Vec<Vec<f64>>> = pyxirr_call!(py, "nper", (rates, -2000, 0, 100_000));
 
@@ -528,7 +528,7 @@ fn test_nper_vec() {
 
 #[rstest]
 fn test_rate_works() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rate: f64 = pyxirr_call!(py, "rate", (PERIODS, PAYMENT, PV));
         assert_future_value!(rate, PERIODS, PAYMENT, PV, None, None);
     })
@@ -536,7 +536,7 @@ fn test_rate_works() {
 
 #[rstest]
 fn test_rate_non_zero_fv() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rate: f64 = pyxirr_call!(py, "rate", (PERIODS, PAYMENT, PV, FV));
         assert_future_value!(rate, PERIODS, PAYMENT, PV, Some(FV), None);
     })
@@ -544,7 +544,7 @@ fn test_rate_non_zero_fv() {
 
 #[rstest]
 fn test_rate_pmt_at_beginning() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rate: f64 = pyxirr_call!(
             py,
             "rate",
@@ -557,7 +557,7 @@ fn test_rate_pmt_at_beginning() {
 
 #[rstest]
 fn test_rate_vec() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let pv = [-593.06, -4725.38, -662.05, -428.78, -13.65];
         let fv = [214.07, 4509.97, 224.11, 686.29, -329.67];
 
@@ -578,7 +578,7 @@ fn test_rate_vec() {
 #[rstest]
 fn test_nfv() {
     // example from https://www.youtube.com/watch?v=775ljhriB8U
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let amounts = PyList::new(py, [1050.0, 1350.0, 1350.0, 1450.0]).unwrap();
         let result: f64 = pyxirr_call!(py, "nfv", (0.03, 6.0, &amounts));
         assert_almost_eq!(result, 5750.16, 0.01);
@@ -608,7 +608,7 @@ fn test_nfv() {
     -2885.875, 1653.125, 1653.125, 1653.125, 8307.328125, 11110408.45703125
 ], 0.038039605693757084)]
 fn test_irr_works(#[case] input: &[f64], #[case] expected: f64) {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let values = PyList::new(py, input).unwrap();
         let result: f64 = pyxirr_call!(py, "irr", (&values,));
         assert_almost_eq!(result, expected);
@@ -618,7 +618,7 @@ fn test_irr_works(#[case] input: &[f64], #[case] expected: f64) {
 #[rstest]
 fn test_irr_zeros() {
     // https://github.com/Anexen/pyxirr/issues/69
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let values = PyList::new(py, [-0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).unwrap();
         let err = pyxirr_call_impl!(py, "irr", (&values,)).unwrap_err();
         assert!(err.is_instance(py, &py.get_type::<pyxirr::InvalidPaymentsError>()));
@@ -658,7 +658,7 @@ fn test_irr_zeros() {
 fn test_irr_equal_payments(#[case] first: &[f64], #[case] other: &[f64], #[case] expected: f64) {
     let input: Vec<_> = first.iter().chain(other).collect();
 
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let values = PyList::new(py, input).unwrap();
         let result: f64 = pyxirr_call!(py, "irr", (&values,));
         assert_almost_eq!(result, expected);
@@ -688,7 +688,7 @@ fn test_irr_equal_payments(#[case] first: &[f64], #[case] other: &[f64], #[case]
     21750.50072725094, 20140.886499523196, 18357.799360554745, 10074.662845544659
 ], 0.235461374465902)]
 fn test_irr_special_cases(#[case] input: &[f64], #[case] expected: f64) {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let values = PyList::new(py, input).unwrap();
         let rate: f64 = pyxirr_call!(py, "irr", (&values,));
         assert_almost_eq!(rate, expected);
@@ -718,7 +718,7 @@ fn test_irr_special_cases(#[case] input: &[f64], #[case] expected: f64) {
     1.10668164e+06
 ] , -0.13209372260468)]
 fn test_gh_46(#[case] input: &[f64], #[case] expected: f64) {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let values = PyList::new(py, input).unwrap();
         let rate: f64 = pyxirr_call!(py, "irr", (&values,));
         assert_almost_eq!(rate, expected);
@@ -735,7 +735,7 @@ fn test_gh_46(#[case] input: &[f64], #[case] expected: f64) {
 #[case("tests/samples/random_1000.csv", 0.8607558299)]
 #[case("tests/samples/minus_0_993.csv", -0.995697224362268)]
 fn test_irr_samples(#[case] input: &str, #[case] expected: f64) {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let payments = PaymentsLoader::from_csv(py, input).to_columns();
         let rate: f64 = pyxirr_call!(py, "irr", (payments.1.clone(),));
 
@@ -750,7 +750,7 @@ fn test_irr_samples(#[case] input: &str, #[case] expected: f64) {
 
 #[rstest]
 fn test_mirr_works() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let values = PyList::new(py, [-1000, 100, 250, 500, 500]).unwrap();
         let result: f64 = pyxirr_call!(py, "mirr", (&values, 0.1, 0.1));
         assert_almost_eq!(result, 0.10401626745);
@@ -759,7 +759,7 @@ fn test_mirr_works() {
 
 #[rstest]
 fn test_mirr_same_sign() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let kwargs = py_dict!(py, "silent" => true);
 
         let values = PyList::new(py, [100_000, 50_000, 25_000]).unwrap();
@@ -782,7 +782,7 @@ fn test_mirr_same_sign() {
 
 #[rstest]
 fn test_cumprinc_works() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "cumprinc", (0.09 / 12.0, 30 * 12, 125_000, 13, 24));
         assert_almost_eq!(result, -934.1071234, 1e-7);
 
@@ -795,7 +795,7 @@ fn test_cumprinc_works() {
 
 #[rstest]
 fn test_cumipmt_works() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let result: f64 = pyxirr_call!(py, "cumipmt", (0.09 / 12.0, 30 * 12, 125_000, 13, 24));
         assert_almost_eq!(result, -11135.23213075);
 

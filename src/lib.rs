@@ -27,14 +27,14 @@ macro_rules! dispatch_vectorized {
         {
             match ($($vars,)*) {
                 ($(Arg::Scalar($vars),)*) => {
-                    let result = $py.allow_threads(move || $non_vec);
+                    let result = $py.detach(move || $non_vec);
                     Arg::Scalar(result)
                 },
                 ($($vars,)*) => {
                     let has_numpy_array = $(matches!($vars, Arg::NumpyArray(_)) || )* false;
                     let ($($vars,)*) = ($($vars.into_arrayd(),)*);
                     let ($($vars,)*) = ($($vars.view(),)*);
-                    let result = $py.allow_threads(move || $vec);
+                    let result = $py.detach(move || $vec);
                     if has_numpy_array {
                         Arg::from(numpy::PyArray::from_owned_array($py, result))
                     } else {
@@ -48,14 +48,14 @@ macro_rules! dispatch_vectorized {
         {
             match ($($vars,)*) {
                 ($(Arg::Scalar($vars),)*) => {
-                    let result = $py.allow_threads(move || $non_vec);
+                    let result = $py.detach(move || $non_vec);
                     Ok(Arg::Scalar(result))
                 },
                 ($($vars,)*) => {
                     let has_numpy_array = $(matches!($vars, Arg::NumpyArray(_)) || )* false;
                     let ($($vars,)*) = ($($vars.into_arrayd(),)*);
                     let ($($vars,)*) = ($($vars.view(),)*);
-                    let result = $py.allow_threads(move || $vec);
+                    let result = $py.detach(move || $vec);
                     let result = if has_numpy_array {
                         result.map(|r| Arg::from(numpy::PyArray::from_owned_array($py, r)))
                     } else {
@@ -83,7 +83,7 @@ fn xirr(
     let (dates, amounts) = conversions::extract_payments(dates, amounts)?;
     let day_count = day_count.map(|x| x.try_into()).transpose()?;
 
-    py.allow_threads(move || {
+    py.detach(move || {
         let result = core::xirr(&dates, &amounts, guess, day_count);
         fallible_float_or_none(result, silent.unwrap_or(false))
     })
@@ -105,9 +105,13 @@ fn xnpv<'a>(
     let day_count = day_count.map(|x| x.try_into()).transpose()?;
     let silent = silent.unwrap_or(false);
 
+    if !silent {
+        core::validate_xnpv_inputs(&amounts, &dates)?;
+    }
+
     match rate {
         Arg::Scalar(rate) => {
-            let result = py.allow_threads(move || core::xnpv(rate, &dates, &amounts, day_count));
+            let result = py.detach(move || core::xnpv(rate, &dates, &amounts, day_count));
             match result {
                 Ok(rate) if rate.is_finite() => Ok(Some(Arg::Scalar(rate))),
                 Ok(_) => Ok(None),
@@ -123,7 +127,7 @@ fn xnpv<'a>(
         rate => {
             let has_numpy_array = matches!(rate, Arg::NumpyArray(_));
             let rate = rate.into_arrayd();
-            let result = py.allow_threads(move || {
+            let result = py.detach(move || {
                 let r = rate.mapv(|r| core::xnpv(r, &dates, &amounts, day_count));
 
                 if silent {
@@ -158,7 +162,7 @@ fn irr(
     guess: Option<f64>,
     silent: Option<bool>,
 ) -> PyResult<Option<f64>> {
-    py.allow_threads(move || {
+    py.detach(move || {
         let result = core::irr(&amounts, guess);
         fallible_float_or_none(result, silent.unwrap_or(false))
     })
@@ -181,19 +185,17 @@ fn npv<'a>(
 ) -> Arg<f64, 'a> {
     match rate {
         Arg::Scalar(rate) => {
-            let result = py.allow_threads(move || core::npv(rate, &amounts, start_from_zero));
+            let result = py.detach(move || core::npv(rate, &amounts, start_from_zero));
             Arg::Scalar(result)
         }
         Arg::Array(rates) => {
-            let result =
-                py.allow_threads(move || rates.mapv(|r| core::npv(r, &amounts, start_from_zero)));
+            let result = py.detach(move || rates.mapv(|r| core::npv(r, &amounts, start_from_zero)));
             Arg::from(result)
         }
         Arg::NumpyArray(rates) => {
             let view = rates.readonly();
             let rates = view.as_array();
-            let result =
-                py.allow_threads(move || rates.mapv(|r| core::npv(r, &amounts, start_from_zero)));
+            let result = py.detach(move || rates.mapv(|r| core::npv(r, &amounts, start_from_zero)));
             Arg::from(numpy::ToPyArray::to_pyarray(&result, py))
         }
     }
@@ -223,7 +225,7 @@ fn fv<'a>(
 #[pyfunction]
 #[pyo3(text_signature = "(rate, nper, amounts)")]
 fn nfv(py: Python, rate: f64, nper: f64, amounts: AmountArray) -> PyResult<Option<f64>> {
-    py.allow_threads(move || Ok(float_or_none(core::nfv(rate, nper, &amounts))))
+    py.detach(move || Ok(float_or_none(core::nfv(rate, nper, &amounts))))
 }
 
 /// Extended Future Value.
@@ -246,7 +248,7 @@ fn xfv(
 ) -> PyResult<Option<f64>> {
     let day_count = day_count.map(|x| x.try_into()).transpose()?;
 
-    py.allow_threads(move || {
+    py.detach(move || {
         let result = core::xfv(
             &start_date,
             &cash_flow_date,
@@ -274,7 +276,7 @@ fn xnfv(
 ) -> PyResult<Option<f64>> {
     let (dates, amounts) = conversions::extract_payments(dates, amounts)?;
     let day_count = day_count.map(|x| x.try_into()).transpose()?;
-    py.allow_threads(move || {
+    py.detach(move || {
         let result = core::xnfv(rate, &dates, &amounts, day_count);
         fallible_float_or_none(result, silent.unwrap_or(false))
     })
@@ -311,7 +313,7 @@ fn mirr(
     reinvest_rate: f64,
     silent: Option<bool>,
 ) -> PyResult<Option<f64>> {
-    py.allow_threads(move || {
+    py.detach(move || {
         let result = core::mirr(&amounts, finance_rate, reinvest_rate);
         fallible_float_or_none(result, silent.unwrap_or(false))
     })
@@ -432,7 +434,7 @@ fn cumprinc(
     pmt_at_beginning: bool,
 ) -> Option<f64> {
     // https://wiki.documentfoundation.org/Documentation/Calc_Functions/CUMPRINC
-    let result = py.allow_threads(move || {
+    let result = py.detach(move || {
         (start_period.trunc() as u64..=end_period.trunc() as u64)
             .map(|per| core::ppmt(rate, per as f64, nper, pv, 0.0, pmt_at_beginning))
             .sum()
@@ -453,7 +455,7 @@ fn cumipmt(
     pmt_at_beginning: bool,
 ) -> Option<f64> {
     // https://wiki.documentfoundation.org/Documentation/Calc_Functions/CUMIPMT
-    let result = py.allow_threads(move || {
+    let result = py.detach(move || {
         (start_period.trunc() as u64..=end_period.trunc() as u64)
             .map(|per| core::ipmt(rate, per as f64, nper, pv, 0.0, pmt_at_beginning))
             .sum()
@@ -526,25 +528,25 @@ mod pe {
     #[pyfunction]
     #[doc = include_str!("../docs/_inline/pe/dpi.md")]
     fn dpi(py: Python, amounts: AmountArray) -> PyResult<f64> {
-        py.allow_threads(move || Ok(private_equity::dpi(&amounts)?))
+        py.detach(move || Ok(private_equity::dpi(&amounts)?))
     }
 
     #[pyfunction]
     #[doc = include_str!("../docs/_inline/pe/dpi.md")]
     fn dpi_2(py: Python, contributions: AmountArray, distributions: AmountArray) -> PyResult<f64> {
-        py.allow_threads(move || Ok(private_equity::dpi_2(&contributions, &distributions)?))
+        py.detach(move || Ok(private_equity::dpi_2(&contributions, &distributions)?))
     }
 
     #[pyfunction]
     #[doc = include_str!("../docs/_inline/pe/rvpi.md")]
     fn rvpi(py: Python, contributions: AmountArray, nav: f64) -> PyResult<f64> {
-        py.allow_threads(move || Ok(private_equity::rvpi(&contributions, nav)?))
+        py.detach(move || Ok(private_equity::rvpi(&contributions, nav)?))
     }
 
     #[pyfunction]
     #[doc = include_str!("../docs/_inline/pe/tvpi.md")]
     pub fn tvpi(py: Python, amounts: AmountArray, nav: Option<f64>) -> PyResult<f64> {
-        py.allow_threads(move || Ok(private_equity::tvpi(&amounts, nav.unwrap_or(0.0))?))
+        py.detach(move || Ok(private_equity::tvpi(&amounts, nav.unwrap_or(0.0))?))
     }
 
     #[pyfunction]
@@ -555,7 +557,7 @@ mod pe {
         distributions: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<f64> {
-        py.allow_threads(move || {
+        py.detach(move || {
             Ok(private_equity::tvpi_2(&contributions, &distributions, nav.unwrap_or(0.0))?)
         })
     }
@@ -563,7 +565,7 @@ mod pe {
     #[pyfunction]
     #[doc = include_str!("../docs/_inline/pe/moic.md")]
     pub fn moic(py: Python, amounts: AmountArray, nav: Option<f64>) -> PyResult<f64> {
-        py.allow_threads(move || Ok(private_equity::moic(&amounts, nav.unwrap_or(0.0))?))
+        py.detach(move || Ok(private_equity::moic(&amounts, nav.unwrap_or(0.0))?))
     }
 
     #[pyfunction]
@@ -574,7 +576,7 @@ mod pe {
         distributions: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<f64> {
-        py.allow_threads(move || {
+        py.detach(move || {
             Ok(private_equity::moic_2(&contributions, &distributions, nav.unwrap_or(0.0))?)
         })
     }
@@ -587,7 +589,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<f64> {
-        py.allow_threads(move || Ok(private_equity::ks_pme(&amounts, &index, nav.unwrap_or(0.0))?))
+        py.detach(move || Ok(private_equity::ks_pme(&amounts, &index, nav.unwrap_or(0.0))?))
     }
 
     #[pyfunction]
@@ -599,7 +601,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<f64> {
-        py.allow_threads(move || {
+        py.detach(move || {
             Ok(private_equity::ks_pme_2(
                 &contributions,
                 &distributions,
@@ -612,7 +614,7 @@ mod pe {
     #[pyfunction]
     #[doc = include_str!("../docs/_inline/pe/ks_pme_flows.md")]
     fn ks_pme_flows(py: Python, amounts: AmountArray, index: AmountArray) -> PyResult<Vec<f64>> {
-        py.allow_threads(move || Ok(private_equity::ks_pme_flows(&amounts, &index)?))
+        py.detach(move || Ok(private_equity::ks_pme_flows(&amounts, &index)?))
     }
 
     #[pyfunction]
@@ -623,7 +625,7 @@ mod pe {
         distributions: AmountArray,
         index: AmountArray,
     ) -> PyResult<(Vec<f64>, Vec<f64>)> {
-        py.allow_threads(move || {
+        py.detach(move || {
             Ok(private_equity::ks_pme_flows_2(&contributions, &distributions, &index)?)
         })
     }
@@ -636,7 +638,7 @@ mod pe {
         index: AmountArray,
         nav: AmountArray,
     ) -> PyResult<f64> {
-        py.allow_threads(move || Ok(private_equity::m_pme(&amounts, &index, &nav)?))
+        py.detach(move || Ok(private_equity::m_pme(&amounts, &index, &nav)?))
     }
 
     #[pyfunction]
@@ -648,7 +650,7 @@ mod pe {
         index: AmountArray,
         nav: AmountArray,
     ) -> PyResult<f64> {
-        py.allow_threads(move || {
+        py.detach(move || {
             Ok(private_equity::m_pme_2(&contributions, &distributions, &index, &nav)?)
         })
     }
@@ -661,7 +663,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<Option<f64>> {
-        py.allow_threads(move || {
+        py.detach(move || {
             fallible_float_or_none(
                 private_equity::pme_plus(&amounts, &index, nav.unwrap_or(0.0)),
                 false,
@@ -678,7 +680,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<Option<f64>> {
-        py.allow_threads(move || {
+        py.detach(move || {
             fallible_float_or_none(
                 private_equity::pme_plus_2(
                     &contributions,
@@ -699,9 +701,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<Vec<f64>> {
-        py.allow_threads(move || {
-            Ok(private_equity::pme_plus_flows(&amounts, &index, nav.unwrap_or(0.0))?)
-        })
+        py.detach(move || Ok(private_equity::pme_plus_flows(&amounts, &index, nav.unwrap_or(0.0))?))
     }
 
     #[pyfunction]
@@ -713,7 +713,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<(Vec<f64>, Vec<f64>)> {
-        py.allow_threads(move || {
+        py.detach(move || {
             let adj_distributions = private_equity::pme_plus_flows_2(
                 &contributions,
                 &distributions,
@@ -733,7 +733,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<f64> {
-        py.allow_threads(move || {
+        py.detach(move || {
             Ok(private_equity::pme_plus_lambda(&amounts, &index, nav.unwrap_or(0.0))?)
         })
     }
@@ -747,7 +747,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<f64> {
-        py.allow_threads(move || {
+        py.detach(move || {
             Ok(private_equity::pme_plus_lambda_2(
                 &contributions,
                 &distributions,
@@ -760,7 +760,7 @@ mod pe {
     #[pyfunction]
     #[doc = include_str!("../docs/_inline/pe/ln_pme_nav.md")]
     fn ln_pme_nav(py: Python, amounts: AmountArray, index: AmountArray) -> PyResult<f64> {
-        py.allow_threads(move || Ok(private_equity::ln_pme_nav(&amounts, &index)?))
+        py.detach(move || Ok(private_equity::ln_pme_nav(&amounts, &index)?))
     }
 
     #[pyfunction]
@@ -771,17 +771,13 @@ mod pe {
         distributions: AmountArray,
         index: AmountArray,
     ) -> PyResult<f64> {
-        py.allow_threads(move || {
-            Ok(private_equity::ln_pme_nav_2(&contributions, &distributions, &index)?)
-        })
+        py.detach(move || Ok(private_equity::ln_pme_nav_2(&contributions, &distributions, &index)?))
     }
 
     #[pyfunction]
     #[doc = include_str!("../docs/_inline/pe/ln_pme.md")]
     fn ln_pme(py: Python, amounts: AmountArray, index: AmountArray) -> PyResult<Option<f64>> {
-        py.allow_threads(move || {
-            fallible_float_or_none(private_equity::ln_pme(&amounts, &index), false)
-        })
+        py.detach(move || fallible_float_or_none(private_equity::ln_pme(&amounts, &index), false))
     }
 
     #[pyfunction]
@@ -792,7 +788,7 @@ mod pe {
         distributions: AmountArray,
         index: AmountArray,
     ) -> PyResult<Option<f64>> {
-        py.allow_threads(move || {
+        py.detach(move || {
             fallible_float_or_none(
                 private_equity::ln_pme_2(&contributions, &distributions, &index),
                 false,
@@ -808,7 +804,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<Option<f64>> {
-        py.allow_threads(move || {
+        py.detach(move || {
             fallible_float_or_none(
                 private_equity::direct_alpha(&amounts, &index, nav.unwrap_or(0.0)),
                 false,
@@ -825,7 +821,7 @@ mod pe {
         index: AmountArray,
         nav: Option<f64>,
     ) -> PyResult<Option<f64>> {
-        py.allow_threads(move || {
+        py.detach(move || {
             fallible_float_or_none(
                 private_equity::direct_alpha_2(
                     &contributions,
@@ -850,7 +846,7 @@ where
     Ok(())
 }
 
-#[pymodule]
+#[pymodule(gil_used = true)]
 #[pyo3(name = "_pyxirr")]
 pub fn pyxirr(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;

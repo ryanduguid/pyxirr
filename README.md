@@ -20,6 +20,8 @@ Features:
 
 # Installation
 
+Python 3.8 or later is required.
+
 ```
 pip install pyxirr
 ```
@@ -27,6 +29,9 @@ pip install pyxirr
 > WASM wheels for [pyodide](https://github.com/pyodide/pyodide) are also available,
 > but unfortunately are [not supported by PyPI](https://github.com/pypi/warehouse/issues/10416).
 > You can find them on the [GitHub Releases](https://github.com/Anexen/pyxirr/releases) page.
+> Current WASM builds target Pyodide 0.28/0.29 (Python 3.13) and 314 (Python 3.14).
+> Pyodide 0.26/0.27 wheels are no longer built because their Emscripten version
+> is incompatible with the Rust toolchain required by the patched dependencies.
 
 # Benchmarks
 
@@ -67,7 +72,8 @@ xirr(['2020-01-01', '2021-01-01'], [-1000, 1200])
 
 The Multiple IRR problem occurs when the signs of cash flows change more than
 once. In this case, we say that the project has non-conventional cash flows.
-This leads to situation, where it can have more the one IRR or have no IRR at all.
+Such cash flows can have multiple IRRs or no IRR.
+Zero-value payments are ignored when counting sign changes.
 
 PyXIRR addresses the Multiple IRR problem as follows:
 

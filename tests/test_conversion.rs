@@ -11,7 +11,7 @@ const EXPECTED: f64 = 0.16353715844;
 
 #[fixture]
 fn payments(#[default(INPUT)] input: &str) -> Payments {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let (dates, amounts) = PaymentsLoader::from_csv(py, input).to_columns();
         (dates.into(), amounts.into())
     })
@@ -34,7 +34,7 @@ fn get_locals<'p>(py: Python<'p>, extra_imports: Option<&[&str]>) -> Bound<'p, P
 
 #[rstest]
 fn test_extract_from_iter() {
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let locals = &get_locals(py, Some(&["datetime"]));
         let dates_iter = py
             .eval(
@@ -52,13 +52,13 @@ fn test_extract_from_iter() {
 
 #[rstest]
 fn test_extract_from_tuples(payments: Payments) {
-    let result: f64 = Python::with_gil(|py| pyxirr_call!(py, "xirr", payments));
+    let result: f64 = Python::attach(|py| pyxirr_call!(py, "xirr", payments));
     assert_almost_eq!(result, EXPECTED);
 }
 
 #[rstest]
 fn test_extract_from_lists() {
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let locals = &get_locals(py, None);
         let data = py.eval(c_str!("map(list, zip(dates, amounts))"), Some(locals), None).unwrap();
         pyxirr_call!(py, "xirr", (data,))
@@ -69,7 +69,7 @@ fn test_extract_from_lists() {
 #[rstest]
 fn test_extract_from_dict() {
     let input = "tests/samples/unordered.csv";
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let data = PaymentsLoader::from_csv(py, input).to_dict();
         pyxirr_call!(py, "xirr", (data,))
     });
@@ -78,7 +78,7 @@ fn test_extract_from_dict() {
 
 #[rstest]
 fn test_extract_dates_from_strings() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let locals = &get_locals(py, Some(&["datetime"]));
         let amounts = locals.get_item("amounts").unwrap();
 
@@ -116,7 +116,7 @@ fn test_extract_dates_from_strings() {
 #[rstest]
 #[cfg_attr(feature = "nonumpy", ignore)]
 fn test_extract_from_numpy_object_array() {
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let locals = &get_locals(py, Some(&["numpy"]));
         let data = py.eval(c_str!("numpy.array([dates, amounts])"), Some(locals), None).unwrap();
         pyxirr_call!(py, "xirr", (data,))
@@ -128,7 +128,7 @@ fn test_extract_from_numpy_object_array() {
 #[rstest]
 #[cfg_attr(feature = "nonumpy", ignore)]
 fn test_extract_from_numpy_arrays() {
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let locals = &get_locals(py, Some(&["numpy"]));
         let dates = py
             .eval(c_str!("numpy.array(dates, dtype='datetime64[D]')"), Some(locals), None)
@@ -143,7 +143,7 @@ fn test_extract_from_numpy_arrays() {
 #[rstest]
 #[cfg_attr(feature = "nonumpy", ignore)]
 fn test_extract_from_pandas_dataframe() {
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let data = pd_read_csv(py, INPUT);
         pyxirr_call!(py, "xirr", (data,))
     });
@@ -154,7 +154,7 @@ fn test_extract_from_pandas_dataframe() {
 #[rstest]
 #[cfg_attr(feature = "nonumpy", ignore)]
 fn test_extract_from_pandas_series() {
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let locals = &get_locals(py, Some(&["pandas"]));
         let dates = py.eval(c_str!("pandas.Series(dates)"), Some(locals), None).unwrap();
         let amounts = py.eval(c_str!("pandas.Series(amounts)"), Some(locals), None).unwrap();
@@ -167,7 +167,7 @@ fn test_extract_from_pandas_series() {
 #[rstest]
 #[cfg_attr(feature = "nonumpy", ignore)]
 fn test_extract_from_pandas_series_with_datetime_index() {
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let locals = &get_locals(py, Some(&["pandas"]));
         let dates = py
             .eval(
@@ -185,7 +185,7 @@ fn test_extract_from_pandas_series_with_datetime_index() {
 #[rstest]
 #[cfg_attr(feature = "nonumpy", ignore)]
 fn test_failed_extract_from_pandas_series_with_int64_index() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let locals = &get_locals(py, Some(&["pandas"]));
         let dates = py.eval(c_str!("pandas.Series(amounts)"), Some(locals), None).unwrap();
         let err = pyxirr_call_impl!(py, "xirr", (dates,)).unwrap_err();
@@ -196,7 +196,7 @@ fn test_failed_extract_from_pandas_series_with_int64_index() {
 #[rstest]
 #[cfg_attr(feature = "nonumpy", ignore)]
 fn test_extract_from_mixed_iterables() {
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let locals = &get_locals(py, Some(&["pandas", "numpy"]));
         let dates = py.eval(c_str!("map(pandas.Timestamp, dates)"), Some(locals), None).unwrap();
         let amounts = py.eval(c_str!("numpy.array(amounts)"), Some(locals), None).unwrap();
@@ -208,7 +208,7 @@ fn test_extract_from_mixed_iterables() {
 
 #[rstest]
 fn test_extract_from_non_float() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let locals = &get_locals(py, Some(&["decimal"]));
         let dates = locals.get_item("dates").unwrap();
 
@@ -228,7 +228,7 @@ fn test_extract_from_non_float() {
 
 #[rstest]
 fn test_payments_different_sign() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let locals = &get_locals(py, None);
         let dates = locals.get_item("dates").unwrap();
 
@@ -244,7 +244,7 @@ fn test_payments_different_sign() {
 
 #[rstest]
 fn test_arrays_of_dirrerent_lengths() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let locals = &get_locals(py, None);
         let dates = locals.get_item("dates").unwrap();
         let amounts = py.eval(c_str!("amounts[:-2]"), Some(locals), None).unwrap();
