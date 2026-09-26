@@ -55,7 +55,7 @@ jobs:
 
   linux:
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: test
+    needs: [msrv, test]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -83,7 +83,7 @@ jobs:
 
   linux-cross:
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: test
+    needs: [msrv, test]
     strategy:
       matrix:
         target: [aarch64, armv7, s390x, ppc64le, ppc64]
@@ -109,7 +109,7 @@ jobs:
 
   linux-musl:
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: test
+    needs: [msrv, test]
     strategy:
       matrix:
         target:
@@ -139,7 +139,7 @@ jobs:
 
   windows:
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: test
+    needs: [msrv, test]
     strategy:
       fail-fast: false
       matrix:
@@ -166,7 +166,7 @@ jobs:
 
   macos:
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: test
+    needs: [msrv, test]
     strategy:
       fail-fast: false
       matrix:
@@ -195,7 +195,7 @@ jobs:
 
   wasm-emscripten:
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: test
+    needs: [msrv, test]
     strategy:
       fail-fast: false
       matrix:
