@@ -11,6 +11,16 @@ env:
   MATURIN_VERSION: 1.15.0
 
 jobs:
+  msrv:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+      - run: rustup toolchain install 1.88.0 --profile minimal
+      - run: cargo +1.88.0 check --locked --lib
+
   test:
     runs-on: ubuntu-22.04
     strategy:
