@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  MATURIN_VERSION: 1.7.4
+  MATURIN_VERSION: 1.15.0
 
 jobs:
   test:
@@ -193,8 +193,10 @@ jobs:
         version:
           - python: "3.13"
             emscripten: 4.0.9 # pyodide 0.28.*
+            pyodide: '0.28.3 0.29.4'
           - python: "3.14"
             emscripten: 5.0.3 # pyodide 314.*
+            pyodide: '314.0.7'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -205,8 +207,19 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: wasm32-unknown-emscripten
-          rust-toolchain: stable
+          rust-toolchain: 1.93.0
           args: --release --strip --interpreter python${{ matrix.version.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check the wheels in Pyodide
+        env:
+          PYODIDE_VERSIONS: ${{ matrix.version.pyodide }}
+        run: |
+          for version in $PYODIDE_VERSIONS; do
+            npm install --no-save --package-lock=false "pyodide@$version"
+            node tests/check_wasm.cjs target/wheels/*.whl
+          done
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
