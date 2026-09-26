@@ -41,7 +41,7 @@ jobs:
           pip install maturin==${{ env.MATURIN_VERSION }}
           maturin build --release --strip --features extension,abi
           pip install --force-reinstall target/wheels/*.whl
-          python -c "import pyxirr; assert pyxirr.xnpv(0, ['2020-01-01'], [100]) == 100"
+          python tests/check_wheel.py
 
   linux:
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}

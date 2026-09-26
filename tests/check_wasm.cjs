@@ -1,5 +1,5 @@
 const { readFileSync } = require('node:fs');
-const { basename } = require('node:path');
+const { basename, join } = require('node:path');
 const { loadPyodide } = require('pyodide');
 
 async function main() {
@@ -15,24 +15,8 @@ async function main() {
   await pyodide.runPythonAsync(`
 import micropip
 await micropip.install(wheel_path)
-import numpy as np
-import pyxirr
-
-dates = ['2020-01-01', '2021-01-01']
-assert pyxirr.xnpv(0, dates, [-100, 110]) == 10
-assert pyxirr.xnpv(0, dates, np.array([-100.0, 110.0])) == 10
-assert pyxirr.xnpv([], dates, [-100, 110]) == []
-assert len(pyxirr.xnpv(np.array([]), dates, [-100, 110])) == 0
-assert pyxirr.is_conventional_cash_flow([-100, 0, 110])
-for rates in (0.1, [], np.array([])):
-    try:
-        pyxirr.xnpv(rates, [], [])
-    except pyxirr.InvalidPaymentsError:
-        pass
-    else:
-        raise AssertionError('Empty payments were accepted')
-print('Pyodide wheel smoke passed')
 `);
+  pyodide.runPython(readFileSync(join(__dirname, 'check_wheel.py'), 'utf8'));
 }
 
 main().catch(error => {

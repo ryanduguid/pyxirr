@@ -3,13 +3,15 @@ use std::{error::Error, fmt};
 use ndarray::{ArrayD, ArrayViewD, Axis, CowArray, IxDyn};
 use numpy::{npyffi, Element, PyArrayDescrMethods, PyArrayDyn, PyArrayMethods, PY_ARRAY_API};
 use pyo3::{
-    exceptions::{PyTypeError, PyValueError},
+    exceptions::{PyRecursionError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyIterator, PyList, PySequence, PyTuple},
+    types::{PyIterator, PyList, PySequence, PyString, PyTuple},
     IntoPyObjectExt,
 };
 
 use crate::conversions::float_or_none;
+
+const MAX_ARRAY_DIMS: usize = 64;
 
 /// An error returned when the payments do not contain both negative and positive payments.
 #[derive(Debug)]
@@ -75,9 +77,9 @@ pub fn pyiter_to_arrayd<'py, T>(pyiter: Bound<'py, PyIterator>) -> PyResult<Arra
 where
     T: FromPyObjectOwned<'py>,
 {
-    let mut dims = Vec::new();
     let mut flat_list = Vec::new();
-    flatten_pyiter(pyiter, &mut dims, &mut flat_list, 0)?;
+    let mut ancestors = vec![pyiter.as_ptr()];
+    let dims = flatten_pyiter(pyiter, &mut flat_list, &mut ancestors)?;
     let arr = ArrayD::from_shape_vec(IxDyn(&dims), flat_list);
     arr.map_err(|e| PyValueError::new_err(e.to_string()))
 }
@@ -102,33 +104,53 @@ pub fn arrayd_to_pylist<'py>(
 
 fn flatten_pyiter<'p, T>(
     pyiter: Bound<'p, PyIterator>,
-    shape: &mut Vec<usize>,
     flat_list: &mut Vec<T>,
-    depth: usize,
-) -> PyResult<()>
+    ancestors: &mut Vec<*mut pyo3::ffi::PyObject>,
+) -> PyResult<Vec<usize>>
 where
     T: FromPyObjectOwned<'p>,
 {
-    let mut max_i = 0;
-    for (i, item) in pyiter.enumerate() {
+    let mut count = 0;
+    let mut child_shape = None;
+    for item in pyiter {
         let item = item?;
-        max_i = i + 1;
-        match item.extract::<T>() {
-            Ok(val) => flat_list.push(val),
+        count += 1;
+        let shape = match item.extract::<T>() {
+            Ok(val) => {
+                flat_list.push(val);
+                Vec::new()
+            }
             Err(_) => {
+                if item.is_instance_of::<PyString>() {
+                    return Err(PyTypeError::new_err("strings are not numeric array values"));
+                }
+                if ancestors.contains(&item.as_ptr()) {
+                    return Err(PyValueError::new_err("cyclic arrays are not supported"));
+                }
+                if ancestors.len() >= MAX_ARRAY_DIMS {
+                    return Err(PyRecursionError::new_err(
+                        "nested arrays support at most 64 dimensions",
+                    ));
+                }
                 let sublist = item.try_iter()?;
-                flatten_pyiter(sublist, shape, flat_list, depth + 1)?;
+                ancestors.push(item.as_ptr());
+                let shape = flatten_pyiter(sublist, flat_list, ancestors)?;
+                ancestors.pop();
+                shape
             }
         };
+        match &child_shape {
+            Some(expected) if expected != &shape => {
+                return Err(PyValueError::new_err("array dimensions must have matching lengths"));
+            }
+            None => child_shape = Some(shape),
+            _ => {}
+        }
     }
 
-    if let Some(current) = shape.get(depth) {
-        shape[depth] = (*current).max(max_i);
-    } else {
-        shape.push(max_i);
-    }
-
-    Ok(())
+    let mut shape = vec![count];
+    shape.extend(child_shape.unwrap_or_default());
+    Ok(shape)
 }
 
 pub enum Arg<'p, T> {
@@ -297,6 +319,76 @@ mod tests {
             let array = pyiter_to_arrayd::<i64>(ob.try_iter().unwrap()).unwrap();
             let expected = ndarray::array![[0, 1, 2], [1, 2, 3], [2, 3, 4]].into_dyn();
             assert!(array == expected)
+        });
+    }
+
+    #[rstest]
+    #[case("[]", vec![0])]
+    #[case("[[]]", vec![1, 0])]
+    #[case("[[], []]", vec![2, 0])]
+    #[case("[[[], []], [[], []]]", vec![2, 2, 0])]
+    #[case("[[1, 2, 3], [4, 5, 6]]", vec![2, 3])]
+    fn test_rectangular_shapes(#[case] input: &str, #[case] shape: Vec<usize>) {
+        Python::attach(|py| {
+            let input = std::ffi::CString::new(input).unwrap();
+            let value = py.eval(&input, None, None).unwrap();
+            let array = pyiter_to_arrayd::<i64>(value.try_iter().unwrap()).unwrap();
+            assert_eq!(array.shape(), shape);
+        });
+    }
+
+    #[rstest]
+    #[case("[[], [[], []]]")]
+    #[case("[1, []]")]
+    #[case("[[1, 2], [3]]")]
+    fn test_rejects_ragged_shapes(#[case] input: &str) {
+        Python::attach(|py| {
+            let input = std::ffi::CString::new(input).unwrap();
+            let value = py.eval(&input, None, None).unwrap();
+            let error = pyiter_to_arrayd::<i64>(value.try_iter().unwrap()).unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+        });
+    }
+
+    #[rstest]
+    #[case("['1']")]
+    #[case("'invalid'")]
+    fn test_rejects_strings(#[case] input: &str) {
+        Python::attach(|py| {
+            let input = std::ffi::CString::new(input).unwrap();
+            let value = py.eval(&input, None, None).unwrap();
+            let error = pyiter_to_arrayd::<f64>(value.try_iter().unwrap()).unwrap_err();
+            assert!(error.is_instance_of::<PyTypeError>(py));
+        });
+    }
+
+    #[rstest]
+    fn test_rejects_cycles_but_accepts_shared_lists() {
+        Python::attach(|py| {
+            let child = PyList::new(py, [1.0, 2.0]).unwrap();
+            let shared = PyList::new(py, [&child, &child]).unwrap();
+            let array = pyiter_to_arrayd::<f64>(shared.try_iter().unwrap()).unwrap();
+            assert_eq!(array, ndarray::array![[1.0, 2.0], [1.0, 2.0]].into_dyn());
+
+            let cyclic = PyList::empty(py);
+            cyclic.append(&cyclic).unwrap();
+            let error = pyiter_to_arrayd::<f64>(cyclic.try_iter().unwrap()).unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+        });
+    }
+
+    #[rstest]
+    fn test_nesting_limit() {
+        Python::attach(|py| {
+            let mut value = 0.1.into_py_any(py).unwrap().into_bound(py);
+            for _ in 0..MAX_ARRAY_DIMS {
+                value = PyList::new(py, [value]).unwrap().into_any();
+            }
+            let array = pyiter_to_arrayd::<f64>(value.try_iter().unwrap()).unwrap();
+            assert_eq!(array.ndim(), MAX_ARRAY_DIMS);
+            let deeper = PyList::new(py, [value]).unwrap();
+            let error = pyiter_to_arrayd::<f64>(deeper.try_iter().unwrap()).unwrap_err();
+            assert!(error.is_instance_of::<PyRecursionError>(py));
         });
     }
 }

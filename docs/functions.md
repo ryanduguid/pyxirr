@@ -24,6 +24,8 @@ CashFlowDict = Dict[DateLike, Amount]
 CashFlow = Union[CashFlowSeries, CashFlowTable, CashFlowDict]
 ```
 
+Dates must be valid calendar dates in the supported range, from year -9999 to 9999. Missing dates (`NaT`) and out-of-range NumPy or pandas dates raise `ValueError`. Numeric arrays are not date arrays. Timezone-aware pandas inputs use their local calendar date, including inside a Series or DataFrame.
+
 ## Multiple IRR problem
 
 The multiple internal rates of return problem occur when the signs of cash
@@ -76,6 +78,8 @@ year_fraction("2019-11-09", "2020-03-05", "act/360")
 
 PyXIRR defines a vectorized functions which takes a nested sequence of objects
 or numpy arrays as inputs and returns a nested sequence of results of the same shape.
+
+Nested Python sequences must be rectangular and have at most 64 dimensions. Ragged or cyclic inputs raise `ValueError`; deeper inputs raise `RecursionError`.
 
 General rules:
 

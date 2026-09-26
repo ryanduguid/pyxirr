@@ -99,7 +99,7 @@ macro_rules! assert_future_value {
 
 static PYXIRR: PyOnceLock<Py<PyModule>> = PyOnceLock::new();
 
-pub fn get_pyxirr_module(py: Python<'_>) -> &Bound<PyModule> {
+pub fn get_pyxirr_module(py: Python<'_>) -> &Bound<'_, PyModule> {
     PYXIRR
         .get_or_init(py, || {
             let module = PyModule::new(py, "pyxirr").unwrap();
