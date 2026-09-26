@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Build Wheels
@@ -61,7 +61,6 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
-          target: ${{ matrix.target }}
           manylinux: auto
           args: --features extension,abi --release --strip
       - name: Check that the source distribution installed correctly
@@ -162,9 +161,9 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - runner: macos-13
+          - runner: macos-15-intel
             target: x86_64
-          - runner: macos-14
+          - runner: macos-15
             target: aarch64
     runs-on: ${{ matrix.platform.runner }}
     steps:
@@ -192,10 +191,10 @@ jobs:
       matrix:
         # https://pyodide.org/en/stable/project/changelog.html
         version:
-          - python: "3.12"
-            emscripten: 3.1.58 # pyodide 0.26.*
           - python: "3.13"
             emscripten: 4.0.9 # pyodide 0.28.*
+          - python: "3.14"
+            emscripten: 5.0.3 # pyodide 314.*
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -206,8 +205,7 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: wasm32-unknown-emscripten
-          # there is an incompatibility between rust >= 1.87-nightly and emscripten < 3.1.74
-          rust-toolchain: nightly-2025-02-17
+          rust-toolchain: stable
           args: --release --strip --interpreter python${{ matrix.version.python }}
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -234,7 +232,7 @@ jobs:
       - run: pip install maturin==${{ env.MATURIN_VERSION }}
 
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: pyxirr*.whl
         env:
