@@ -20,6 +20,8 @@ Features:
 
 # Installation
 
+Python 3.8 or later is required.
+
 ```
 pip install pyxirr
 ```

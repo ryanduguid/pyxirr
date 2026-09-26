@@ -73,7 +73,7 @@ macro_rules! broadcast_together {
 
 pub fn pyiter_to_arrayd<'py, T>(pyiter: Bound<'py, PyIterator>) -> PyResult<ArrayD<T>>
 where
-    T: FromPyObject<'py>,
+    T: FromPyObjectOwned<'py>,
 {
     let mut dims = Vec::new();
     let mut flat_list = Vec::new();
@@ -107,22 +107,21 @@ fn flatten_pyiter<'p, T>(
     depth: usize,
 ) -> PyResult<()>
 where
-    T: FromPyObject<'p>,
+    T: FromPyObjectOwned<'p>,
 {
     let mut max_i = 0;
     for (i, item) in pyiter.enumerate() {
         let item = item?;
-        max_i = i;
+        max_i = i + 1;
         match item.extract::<T>() {
             Ok(val) => flat_list.push(val),
             Err(_) => {
                 let sublist = item.try_iter()?;
                 flatten_pyiter(sublist, shape, flat_list, depth + 1)?;
             }
-        }
+        };
     }
 
-    max_i += 1;
     if let Some(current) = shape.get(depth) {
         shape[depth] = (*current).max(max_i);
     } else {
@@ -148,7 +147,7 @@ where
 }
 
 fn is_numpy_available() -> bool {
-    Python::with_gil(|py| py.import("numpy").is_ok())
+    Python::attach(|py| py.import("numpy").is_ok())
 }
 
 fn pyarray_cast<'p, U: Element>(ob: &Bound<'p, PyAny>) -> PyResult<Bound<'p, PyArrayDyn<U>>> {
@@ -161,29 +160,32 @@ fn pyarray_cast<'p, U: Element>(ob: &Bound<'p, PyAny>) -> PyResult<Bound<'p, PyA
         )
     };
     if !ptr.is_null() {
-        Ok(unsafe { Bound::from_owned_ptr(ob.py(), ptr).downcast_into_unchecked() })
+        Ok(unsafe { Bound::from_owned_ptr(ob.py(), ptr).cast_into_unchecked() })
     } else {
         Err(PyErr::fetch(ob.py()))
     }
 }
 
-impl<'p> FromPyObject<'p> for Arg<'p, f64> {
-    fn extract_bound(ob: &Bound<'p, PyAny>) -> PyResult<Self> {
+impl<'p> FromPyObject<'_, 'p> for Arg<'p, f64> {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, 'p, PyAny>) -> PyResult<Self> {
+        let ob = &*ob;
         if let Ok(value) = ob.extract::<f64>() {
             return Ok(Arg::Scalar(value));
         };
 
-        if ob.downcast::<PyList>().is_ok()
-            || ob.downcast::<PyTuple>().is_ok()
-            || ob.downcast::<PyIterator>().is_ok()
-            || ob.downcast::<PySequence>().is_ok()
+        if ob.cast::<PyList>().is_ok()
+            || ob.cast::<PyTuple>().is_ok()
+            || ob.cast::<PyIterator>().is_ok()
+            || ob.cast::<PySequence>().is_ok()
         {
             let arr = pyiter_to_arrayd(ob.try_iter()?)?;
             return Ok(Arg::Array(CowArray::from(arr)));
         }
 
         if is_numpy_available() {
-            if let Ok(a) = ob.downcast::<numpy::PyArrayDyn<f64>>() {
+            if let Ok(a) = ob.cast::<numpy::PyArrayDyn<f64>>() {
                 return Ok(Arg::NumpyArray(a.clone()));
             }
 
@@ -197,23 +199,26 @@ impl<'p> FromPyObject<'p> for Arg<'p, f64> {
     }
 }
 
-impl<'p> FromPyObject<'p> for Arg<'p, bool> {
-    fn extract_bound(ob: &Bound<'p, PyAny>) -> PyResult<Self> {
+impl<'p> FromPyObject<'_, 'p> for Arg<'p, bool> {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, 'p, PyAny>) -> PyResult<Self> {
+        let ob = &*ob;
         if let Ok(value) = ob.extract::<bool>() {
             return Ok(Arg::Scalar(value));
         };
 
-        if ob.downcast::<PyList>().is_ok()
-            || ob.downcast::<PyTuple>().is_ok()
-            || ob.downcast::<PyIterator>().is_ok()
-            || ob.downcast::<PySequence>().is_ok()
+        if ob.cast::<PyList>().is_ok()
+            || ob.cast::<PyTuple>().is_ok()
+            || ob.cast::<PyIterator>().is_ok()
+            || ob.cast::<PySequence>().is_ok()
         {
             let arr = pyiter_to_arrayd(ob.try_iter()?)?;
             return Ok(Arg::Array(CowArray::from(arr)));
         }
 
         if is_numpy_available() {
-            if let Ok(a) = ob.downcast::<numpy::PyArrayDyn<bool>>() {
+            if let Ok(a) = ob.cast::<numpy::PyArrayDyn<bool>>() {
                 return Ok(Arg::NumpyArray(a.clone()));
             }
         }
@@ -287,7 +292,7 @@ mod tests {
 
     #[rstest]
     fn test_flatten_pyiter() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let ob = py.eval(c_str!("(range(i, i + 3) for i in range(3))"), None, None).unwrap();
             let array = pyiter_to_arrayd::<i64>(ob.try_iter().unwrap()).unwrap();
             let expected = ndarray::array![[0, 1, 2], [1, 2, 3], [2, 3, 4]].into_dyn();

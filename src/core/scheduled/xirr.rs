@@ -67,13 +67,21 @@ pub fn xnpv(
     amounts: &[f64],
     day_count: Option<DayCount>,
 ) -> Result<f64, InvalidPaymentsError> {
+    validate_xnpv_inputs(amounts, dates)?;
+
+    let deltas = &day_count_factor(dates, day_count);
+    Ok(xnpv_result(amounts, deltas, rate))
+}
+
+pub fn validate_xnpv_inputs(
+    amounts: &[f64],
+    dates: &[DateLike],
+) -> Result<(), InvalidPaymentsError> {
     validate_length(amounts, dates)?;
     if dates.is_empty() {
         return Err(InvalidPaymentsError::new("at least one payment is required"));
     }
-
-    let deltas = &day_count_factor(dates, day_count);
-    Ok(xnpv_result(amounts, deltas, rate))
+    Ok(())
 }
 
 pub fn sign_changes(v: &[f64]) -> i32 {

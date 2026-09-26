@@ -69,8 +69,11 @@ impl DayCount {
 
 struct DaysSinceUnixEpoch(i32);
 
-impl<'py> FromPyObject<'py> for DaysSinceUnixEpoch {
-    fn extract_bound(obj: &Bound<'py, PyAny>) -> PyResult<Self> {
+impl<'py> FromPyObject<'_, 'py> for DaysSinceUnixEpoch {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, 'py, PyAny>) -> PyResult<Self> {
+        let obj = &*obj;
         obj.extract::<i64>().map(|x| Self(x as i32))
     }
 }
@@ -125,13 +128,16 @@ impl TryFrom<&Bound<'_, PyDate>> for DateLike {
 //     }
 // }
 
-impl<'py> FromPyObject<'py> for DateLike {
-    fn extract_bound(obj: &Bound<'py, PyAny>) -> PyResult<Self> {
-        if let Ok(py_date) = obj.downcast::<PyDate>() {
+impl<'py> FromPyObject<'_, 'py> for DateLike {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, 'py, PyAny>) -> PyResult<Self> {
+        let obj = &*obj;
+        if let Ok(py_date) = obj.cast::<PyDate>() {
             return py_date.try_into();
         }
 
-        if let Ok(py_string) = obj.downcast::<PyString>() {
+        if let Ok(py_string) = obj.cast::<PyString>() {
             return py_string
                 .to_cow()?
                 .parse::<DateLike>()
@@ -147,10 +153,9 @@ impl<'py> FromPyObject<'py> for DateLike {
                 .extract::<DaysSinceUnixEpoch>()?
                 .into()),
 
-            "Timestamp" => Ok(obj
-                .call_method0(intern!(py, "to_pydatetime"))?
-                .downcast::<PyDate>()?
-                .try_into()?),
+            "Timestamp" => {
+                Ok(obj.call_method0(intern!(py, "to_pydatetime"))?.cast::<PyDate>()?.try_into()?)
+            }
 
             other => Err(PyTypeError::new_err(format!(
                 "Type {other:?} is not understood. Expected: date"
@@ -161,9 +166,9 @@ impl<'py> FromPyObject<'py> for DateLike {
 
 fn extract_iterable<'a, T>(values: &Bound<'a, PyAny>) -> PyResult<Vec<T>>
 where
-    T: FromPyObject<'a>,
+    T: FromPyObjectOwned<'a>,
 {
-    values.try_iter()?.map(|i| i.and_then(|j| j.extract())).collect()
+    values.try_iter()?.map(|i| i.and_then(|j| j.extract().map_err(Into::into))).collect()
 }
 
 fn extract_date_series_from_numpy(series: &Bound<PyAny>) -> PyResult<Vec<DateLike>> {
@@ -171,7 +176,7 @@ fn extract_date_series_from_numpy(series: &Bound<PyAny>) -> PyResult<Vec<DateLik
     Ok(series
         .call_method1(intern!(py, "astype"), (intern!(py, "datetime64[D]"),))?
         .call_method1(intern!(py, "astype"), (intern!(py, "int32"),))?
-        .downcast::<PyArray1<i32>>()?
+        .cast::<PyArray1<i32>>()?
         .readonly()
         .as_slice()?
         .iter()
@@ -207,9 +212,9 @@ fn extract_records(data: &Bound<PyAny>) -> PyResult<(Vec<DateLike>, Vec<f64>)> {
         let obj = obj?;
         // get_item() uses different ffi calls for different objects
         // PyTuple.get_item (ffi::PyTuple_GetItem) is faster than PyAny.get_item (ffi::PyObject_GetItem)
-        let tup = if let Ok(py_tuple) = obj.downcast::<PyTuple>() {
+        let tup = if let Ok(py_tuple) = obj.cast::<PyTuple>() {
             (py_tuple.get_item(0)?, py_tuple.get_item(1)?)
-        } else if let Ok(py_list) = obj.downcast::<PyList>() {
+        } else if let Ok(py_list) = obj.cast::<PyList>() {
             (py_list.get_item(0)?, py_list.get_item(1)?)
         } else {
             (obj.get_item(0)?, obj.get_item(1)?)
@@ -230,8 +235,11 @@ impl AmountArray {
     }
 }
 
-impl<'s> FromPyObject<'s> for AmountArray {
-    fn extract_bound(obj: &Bound<'s, PyAny>) -> PyResult<Self> {
+impl<'s> FromPyObject<'_, 's> for AmountArray {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, 's, PyAny>) -> PyResult<Self> {
+        let obj = &*obj;
         extract_amount_series(obj).map(AmountArray)
     }
 }
@@ -263,7 +271,7 @@ pub fn extract_payments(
         return Ok((extract_date_series(dates)?, extract_amount_series(amounts.unwrap())?));
     };
 
-    if let Ok(py_dict) = dates.downcast::<PyDict>() {
+    if let Ok(py_dict) = dates.cast::<PyDict>() {
         return Ok((
             extract_iterable::<DateLike>(py_dict.keys().as_any())?,
             extract_iterable::<f64>(py_dict.values().as_any())?,
@@ -312,14 +320,14 @@ mod tests {
     fn get_locals<'p>(py: &'p Python) -> Bound<'p, PyDict> {
         py.eval(c_str!("{ 'np': __import__('numpy') }"), None, None)
             .unwrap()
-            .downcast_into::<PyDict>()
+            .cast_into::<PyDict>()
             .unwrap()
     }
 
     #[rstest]
     #[cfg_attr(feature = "nonumpy", ignore)]
     fn test_extract_from_numpy_datetime_array() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let locals = &get_locals(&py);
             let data = py
                 .eval(
@@ -338,7 +346,7 @@ mod tests {
     #[rstest]
     #[cfg_attr(feature = "nonumpy", ignore)]
     fn test_extract_from_numpy_datetime() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let locals = &get_locals(&py);
             let data =
                 py.eval(c_str!("np.datetime64('2007-02-01', '[D]')"), Some(locals), None).unwrap();

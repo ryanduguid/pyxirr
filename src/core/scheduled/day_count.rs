@@ -1,11 +1,8 @@
 use std::{cmp::min, fmt, str::FromStr};
 
-use time::{
-    util::{days_in_year_month, is_leap_year},
-    Date, Month,
-};
+use time::{util::is_leap_year, Date, Month};
 
-#[pyo3::pyclass]
+#[pyo3::pyclass(from_py_object)]
 #[pyo3(frozen)]
 #[derive(Debug, Clone, Copy)]
 #[allow(non_camel_case_types)]
@@ -227,7 +224,7 @@ fn days_between_30_360(d1: &Date, d2: &Date, d1_day: u8, d2_day: u8) -> i32 {
 }
 
 pub fn is_last_day_of_month(date: &Date) -> bool {
-    date.day() == days_in_year_month(date.year(), date.month())
+    date.day() == date.month().length(date.year())
 }
 
 pub fn is_last_day_of_feb(date: &Date) -> bool {

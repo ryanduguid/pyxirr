@@ -14,7 +14,7 @@ use common::PaymentsLoader;
 #[case::random_1000("tests/samples/random_1000.csv", 41169.6659983284)]
 fn test_xnpv_samples(#[case] input: &str, #[case] expected: f64) {
     let rate = 0.1;
-    let result: f64 = Python::with_gil(|py| {
+    let result: f64 = Python::attach(|py| {
         let payments = PaymentsLoader::from_csv(py, input).to_records();
         pyxirr_call!(py, "xnpv", (rate, payments))
     });
@@ -83,7 +83,7 @@ fn test_xnpv_samples(#[case] input: &str, #[case] expected: f64) {
 #[case::zeros("tests/samples/zeros.csv", 0.175680730580782)]
 #[case::neg_1938("tests/samples/1938.csv", -0.5945650822679239)]
 fn test_xirr_samples(#[case] input: &str, #[case] expected: f64) {
-    let result = Python::with_gil(|py| {
+    let result = Python::attach(|py| {
         let payments = PaymentsLoader::from_csv(py, input).to_records();
         let rate: Option<f64> = pyxirr_call!(py, "xirr", (payments.clone(),));
 
@@ -104,7 +104,7 @@ fn test_xirr_samples(#[case] input: &str, #[case] expected: f64) {
 
 #[rstest]
 fn test_xnpv_empty() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let args = (0.1, PyList::empty(py), PyList::empty(py));
         let err = pyxirr_call_impl!(py, "xnpv", args.clone()).unwrap_err();
         assert!(err.is_instance_of::<pyxirr::InvalidPaymentsError>(py));
@@ -116,7 +116,7 @@ fn test_xnpv_empty() {
 
 #[rstest]
 fn test_xnpv_empty_vector_rates() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let args = (vec![0.1, 0.2], PyList::empty(py), PyList::empty(py));
         let err = pyxirr_call_impl!(py, "xnpv", args.clone()).unwrap_err();
         assert!(err.is_instance_of::<pyxirr::InvalidPaymentsError>(py));
@@ -127,12 +127,37 @@ fn test_xnpv_empty_vector_rates() {
     })
 }
 
+fn assert_xnpv_empty_rates(py: Python<'_>, rates: Bound<'_, PyAny>) {
+    for (dates, amounts) in [(vec![], vec![]), (vec!["2021-01-01"], vec![]), (vec![], vec![100.])] {
+        let args = (rates.clone(), dates, amounts);
+        let err = pyxirr_call_impl!(py, "xnpv", args.clone()).unwrap_err();
+        assert!(err.is_instance_of::<pyxirr::InvalidPaymentsError>(py));
+        let result = pyxirr_call_impl!(py, "xnpv", args, py_dict!(py, "silent" => true)).unwrap();
+        assert_eq!(result.len().unwrap(), 0);
+    }
+    let result = pyxirr_call_impl!(py, "xnpv", (rates, vec!["2021-01-01"], vec![100.])).unwrap();
+    assert_eq!(result.len().unwrap(), 0);
+}
+
+#[rstest]
+fn test_xnpv_empty_list_rates() {
+    Python::attach(|py| assert_xnpv_empty_rates(py, PyList::empty(py).into_any()))
+}
+
+#[rstest]
+#[cfg_attr(feature = "nonumpy", ignore)]
+fn test_xnpv_empty_numpy_rates() {
+    Python::attach(|py| {
+        assert_xnpv_empty_rates(py, numpy::PyArray1::<f64>::from_vec(py, vec![]).into_any())
+    })
+}
+
 #[rstest]
 #[case::deposits(vec![100., 50.], 150.)]
 #[case::withdrawals(vec![-100., -50.], -150.)]
 #[case::zeros(vec![0., 0.], 0.)]
 fn test_xnpv_single_sign(#[case] amounts: Vec<f64>, #[case] expected: f64) {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let dates = vec!["2021-01-01", "2022-01-01"];
         let result: f64 = pyxirr_call!(py, "xnpv", (0., dates, amounts));
         assert_almost_eq!(result, expected);
@@ -141,7 +166,7 @@ fn test_xnpv_single_sign(#[case] amounts: Vec<f64>, #[case] expected: f64) {
 
 #[rstest]
 fn test_xirr_silent() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let args = (PyList::empty(py), PyList::empty(py));
         let err = pyxirr_call_impl!(py, "xirr", args.clone()).unwrap_err();
         assert!(err.is_instance_of::<pyxirr::InvalidPaymentsError>(py));
@@ -154,7 +179,7 @@ fn test_xirr_silent() {
 #[rstest]
 fn test_xfv() {
     // http://westclintech.com/SQL-Server-Financial-Functions/SQL-Server-XFV-function
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let args = (
             PyDate::new(py, 2011, 2, 1).unwrap(),
             PyDate::new(py, 2011, 3, 1).unwrap(),
@@ -170,7 +195,7 @@ fn test_xfv() {
 
 #[rstest]
 fn test_xnfv() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let payments = PaymentsLoader::from_csv(py, "tests/samples/xnfv.csv").to_records();
         let result: f64 = pyxirr_call!(py, "xnfv", (0.0250, payments));
         assert_almost_eq!(result, 57238.1249299303);
@@ -179,7 +204,7 @@ fn test_xnfv() {
 
 #[rstest]
 fn test_xnfv_silent() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let dates = vec!["2021-01-01", "2022-01-01"].into_pyobject(py).unwrap();
         let amounts = vec![1000, 100].into_pyobject(py).unwrap();
         let args = (0.0250, dates, amounts);
@@ -195,7 +220,7 @@ fn test_xnfv_silent() {
 
 #[rstest]
 fn test_sum_xfv_eq_xnfv() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let rate = 0.0250;
         let (dates, amounts) = PaymentsLoader::from_csv(py, "tests/samples/xnfv.csv").to_columns();
 
@@ -233,7 +258,7 @@ fn test_sum_xfv_eq_xnfv() {
 #[case("30E/360", 0.100675477282743)] // 6
 #[case("act/act ISDA", 0.100739648987346)] // 12
 fn test_xirr_day_count(#[case] day_count: &str, #[case] expected: f64) {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let dates = ["01/12/2007", "02/14/2008", "03/03/2008", "06/14/2008", "12/01/2008"];
         let amounts = [-10000, 2500, 2000, 3000, 4000];
 

@@ -13,18 +13,35 @@ env:
 jobs:
   test:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.8', '3.11', '3.14']
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
       - name: Test no numpy
         run: cargo test --release --features nonumpy
       - name: Install numpy v1
+        if: matrix.python != '3.14'
         run: pip install 'numpy>=1,<2' 'pandas>=1,<2'
       - name: Test numpy v1
+        if: matrix.python != '3.14'
         run: cargo test --release
       - name: Install numpy v2
+        if: matrix.python != '3.8'
         run: pip install 'numpy>=2,<3' 'pandas>=2,<3'
       - name: Test numpy v2
+        if: matrix.python != '3.8'
         run: cargo test --release
+      - name: Build and check the stable ABI wheel
+        run: |
+          pip install maturin==${{ env.MATURIN_VERSION }}
+          maturin build --release --strip --features extension,abi
+          pip install --force-reinstall target/wheels/*.whl
+          python -c "import pyxirr; assert pyxirr.xnpv(0, ['2020-01-01'], [100]) == 100"
 
   linux:
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
@@ -40,7 +57,7 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           manylinux: auto
-          args: --release --strip --sdist --interpreter 3.7 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+          args: --release --strip --sdist --interpreter 3.8 3.9 3.10 3.11 3.12 3.13 3.14
       - uses: PyO3/maturin-action@v1
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
@@ -69,7 +86,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --strip --interpreter 3.7 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+          args: --release --strip --interpreter 3.8 3.9 3.10 3.11 3.12 3.13 3.14
       - uses: PyO3/maturin-action@v1
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
@@ -99,7 +116,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.target }}
           manylinux: musllinux_1_2
-          args: --release --strip --interpreter 3.7 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+          args: --release --strip --interpreter 3.8 3.9 3.10 3.11 3.12 3.13 3.14
       - uses: PyO3/maturin-action@v1
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
@@ -117,7 +134,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -156,7 +173,7 @@ jobs:
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
-          args: --release --strip --interpreter 3.7 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+          args: --release --strip --interpreter 3.8 3.9 3.10 3.11 3.12 3.13 3.14
       - uses: PyO3/maturin-action@v1
         with:
           maturin-version: ${{ env.MATURIN_VERSION }}
