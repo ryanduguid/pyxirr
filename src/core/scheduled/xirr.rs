@@ -1,7 +1,7 @@
 use super::{year_fraction, DayCount};
 use crate::core::{
     models::{validate, validate_length, DateLike, InvalidPaymentsError},
-    optimize::{brentq, newton_raphson_2},
+    optimize::brentq,
     utils::{fast_pow, initial_guess},
 };
 
@@ -28,7 +28,7 @@ pub fn xirr(
     let fd = |rate| xnpv_result_with_deriv(amounts, deltas, rate);
 
     let guess = guess.unwrap_or_else(|| initial_guess(amounts));
-    let rate = newton_raphson_2(guess, &fd);
+    let rate = newton_raphson(guess, &fd);
 
     if rate.is_finite() {
         return Ok(rate);
@@ -43,7 +43,7 @@ pub fn xirr(
     let mut step = 0.01;
     let mut guess = -0.99999999999999;
     while guess < 1.0 {
-        let rate = newton_raphson_2(guess, &fd);
+        let rate = newton_raphson(guess, &fd);
         if rate.is_finite() {
             return Ok(rate);
         }
@@ -52,6 +52,45 @@ pub fn xirr(
     }
 
     Ok(f64::NAN)
+}
+
+// XIRR rates must be above -1. Keep this domain policy beside XNPV.
+fn newton_raphson<Func>(start: f64, fd: &Func) -> f64
+where
+    Func: Fn(f64) -> (f64, f64),
+{
+    const RATE_TOL: f64 = 1e-9;
+    let mut x = start;
+    for _ in 0..50 {
+        let (value, derivative) = fd(x);
+        if value == 0.0 {
+            return x;
+        }
+        let delta = value / derivative;
+        if delta.abs() < RATE_TOL && value.abs() < 1e-3 {
+            return x - delta;
+        }
+        let next = x - delta;
+        if next == x {
+            // A steep root can have a large residual at the nearest float.
+            // Probe within the rate tolerance, or representable spacing.
+            let step = RATE_TOL.max(f64::EPSILON * x.abs());
+            let lo = x - step.min((1.0 + x) / 2.0);
+            let hi = x + step;
+            if lo > -1.0 && lo < x && hi > x && hi.is_finite() {
+                let (f_lo, f_hi) = (fd(lo).0, fd(hi).0);
+                let clear = |v: f64| v.is_finite() && v.abs() > value.abs();
+                // ponytail: sampled signs are a heuristic, not an error bound;
+                // certified root guarantees would require interval evaluation.
+                if clear(f_lo) && clear(f_hi) && (f_lo < 0.0) != (f_hi < 0.0) {
+                    return x;
+                }
+            }
+            return f64::NAN;
+        }
+        x = next;
+    }
+    f64::NAN
 }
 
 fn xirr_analytical_2(amounts: &[f64], deltas: &[f64]) -> f64 {

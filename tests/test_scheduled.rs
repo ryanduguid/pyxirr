@@ -140,7 +140,9 @@ fn test_xirr_cashflow_scale_issue_75() {
         let (dates, amounts) =
             PaymentsLoader::from_csv(py, "tests/samples/cashflow_scale.csv").to_columns();
         let amounts: Vec<f64> = amounts.extract().unwrap();
-        for divisor in [1.0, 10.0, 100.0, 1000.0, 10000.0] {
+        // Power-of-two divisors leave the normalized payments bit-identical.
+        let powers = [2f64.powi(-900), 2f64.powi(-30), 2f64.powi(30), 2f64.powi(900)];
+        for divisor in [1.0, 10.0, 100.0, 1000.0, 10000.0].into_iter().chain(powers) {
             let amounts: Vec<_> = amounts.iter().map(|amount| amount / divisor).collect();
             let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates.clone(), amounts));
             // Independently checked with 60-digit decimal bisection of XNPV.
@@ -159,6 +161,127 @@ fn test_xirr_cashflow_scale_without_root() {
             let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts));
             assert!(rate.is_none(), "unexpected root {rate:?} at scale {scale}");
         }
+    });
+}
+
+#[rstest]
+fn test_xirr_steep_unique_root() {
+    Python::with_gil(|py| {
+        // With year fractions 0, 5 and 6, q = 1 + r solves -q^6 - q + 1e-3 = 0,
+        // which is strictly decreasing for q > 0, so the root is unique.
+        let dates = ["2021-01-01", "2026-01-01", "2027-01-01"];
+        let amounts = [-1e-6, -1e-6, 1e-9];
+        let kwargs = py_dict!(py, "guess" => -0.999, "day_count" => "30E/360");
+        let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts), kwargs);
+        // Independently checked with 90-digit decimal bisection of XNPV.
+        assert_almost_eq!(rate.unwrap(), -0.999, 1e-14);
+    });
+}
+
+#[rstest]
+#[case::unique_root(-1.0)]
+#[case::two_roots(1.0)]
+fn test_xirr_steep_root_scale(#[case] sign: f64) {
+    Python::with_gil(|py| {
+        let dates = ["2021-01-01", "2026-01-01", "2027-01-01"];
+        for scale in [1e-200, 1e-6, 1.0, 1e8, 1e200] {
+            for k in 0..10 {
+                let amounts = [sign * scale, -scale, scale * (0.001 + k as f64 * 1e-12)];
+                let kwargs = py_dict!(py, "guess" => -0.999, "day_count" => "30E/360");
+                let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts), kwargs);
+                let rate = rate.unwrap_or_else(|| panic!("no root for k={k} at scale {scale}"));
+                // sign * q^6 - q + c = 0 with q^6 ~ 1e-18: the root near the guess is c - 1.
+                let c = amounts[2] / scale;
+                assert_almost_eq!(rate, c - 1.0, 1e-14);
+            }
+        }
+    });
+}
+
+#[rstest]
+fn test_xirr_without_root_near_tangent() {
+    Python::with_gil(|py| {
+        // q^6 * XNPV = a*q^6 + (q + b/2)^2 + (c - b^2/4) for amounts [a, 1, b, c], and
+        // exact rational arithmetic on these floats gives c - b^2/4 > 0: no root.
+        let dates = ["2021-01-01", "2025-01-01", "2026-01-01", "2027-01-01"];
+        let amounts = [1e-20, 1.0, -2e-4, 1e-8 + 1e-20];
+        // Power-of-two scales keep the amounts, and so the proof, exact.
+        for scale in [2f64.powi(-600), 1.0, 2f64.powi(600)] {
+            let amounts = amounts.map(|amount| amount * scale);
+            for guess in [Some(-0.9998999999), None, Some(-0.9), Some(0.1)] {
+                let kwargs = py_dict!(py, "guess" => guess, "day_count" => "30E/360");
+                let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts), kwargs);
+                assert!(rate.is_none(), "unexpected root {rate:?} for {guess:?} at {scale}");
+            }
+        }
+    });
+}
+
+#[rstest]
+fn test_xirr_without_root_any_guess() {
+    Python::with_gil(|py| {
+        let dates = ["2021-01-01", "2022-01-01", "2023-01-01"];
+        for scale in [1e-200, 1e-12, 1.0, 1e200] {
+            // The quadratic has a negative discriminant.
+            let amounts = [-100.0 * scale, 50.0 * scale, -100.0 * scale];
+            for guess in [-0.999, -0.9, 0.1, 10.0] {
+                let rate: Option<f64> =
+                    pyxirr_call!(py, "xirr", (dates, amounts), py_dict!(py, "guess" => guess));
+                assert!(rate.is_none(), "unexpected root {rate:?} at scale {scale}");
+            }
+        }
+    });
+}
+
+#[rstest]
+fn test_xirr_unique_root_near_minus_one() {
+    Python::with_gil(|py| {
+        // -q^2 - q + c has one root with q = 1 + r > 0, within 1e-26 of q, and
+        // rate - 1e-9 is outside that domain.
+        let dates = ["2021-01-01", "2022-01-01", "2023-01-01"];
+        for n in 1..=8 {
+            let guess = -1.0 + n as f64 * 1e-11;
+            let q = 1.0 + guess;
+            for scale in [2f64.powi(-600), 1.0, 2f64.powi(600)] {
+                let amounts = [-scale, -scale, (q + q * q) * scale];
+                let kwargs = py_dict!(py, "guess" => guess, "day_count" => "30E/360");
+                let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts), kwargs);
+                let rate = rate.unwrap_or_else(|| panic!("no root for n={n} at scale {scale}"));
+                assert_almost_eq!(rate, guess, 1e-15);
+            }
+        }
+    });
+}
+
+#[rstest]
+fn test_xirr_unique_root_large_rate() {
+    Python::with_gil(|py| {
+        // -2^-25 q^2 + q + 2^-40 has one root with q > 0; the rate rounds to
+        // 2^25 - 1, whose ulp (3.7e-9) exceeds 1e-9.
+        let dates = ["2021-01-01", "2022-01-01", "2023-01-01"];
+        let guess = 2f64.powi(25) - 1.0;
+        for scale in [2f64.powi(-600), 1.0, 2f64.powi(600)] {
+            let amounts = [-2f64.powi(-25) * scale, scale, 2f64.powi(-40) * scale];
+            let kwargs = py_dict!(py, "guess" => guess, "day_count" => "30E/360");
+            let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts), kwargs);
+            assert_almost_eq!(rate.unwrap(), guess, 1e-8);
+        }
+    });
+}
+
+#[rstest]
+#[case(3.0, 2.0)]
+#[case(11.0, 10.0)]
+#[case(7.0, 5.0)]
+fn test_xirr_tangent_root(#[case] a: f64, #[case] b: f64) {
+    Python::with_gil(|py| {
+        // XNPV = -(b*q - a)^2 / q^2: a double root at q = a/b, without a sign change,
+        // that rounding only determines to about the square root of its error.
+        let dates = ["2021-01-01", "2022-01-01", "2023-01-01"];
+        let amounts = [-b * b, 2.0 * a * b, -a * a];
+        let kwargs = py_dict!(py, "guess" => 0.1, "day_count" => "30E/360");
+        let rate: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts), kwargs);
+        assert_almost_eq!(rate.unwrap(), (a - b) / b, 1e-7);
     });
 }
 
