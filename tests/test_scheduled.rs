@@ -270,6 +270,55 @@ fn test_xirr_unique_root_large_rate() {
 }
 
 #[rstest]
+fn test_xirr_short_date_large_rates() {
+    Python::with_gil(|py| {
+        let dates = ["2021-01-01", "2021-01-02", "2021-01-03"];
+        for j in 0..1000 {
+            let c = 60.0 + j as f64 * 0.001;
+            // With y = (1+r)^(-1/365), solve c*y^2 + 50*y - 100 = 0.
+            let y = 200.0 / (50.0 + (2500.0 + 400.0 * c).sqrt());
+            let expected = (-y.ln() / (1.0 / 365.0)).exp_m1();
+            for scale in [2f64.powi(-600), 1.0, 2f64.powi(600)] {
+                let amounts = [-100.0 * scale, 50.0 * scale, c * scale];
+                let omitted: Option<f64> = pyxirr_call!(py, "xirr", (dates, amounts));
+                let none: Option<f64> = pyxirr_call!(
+                    py,
+                    "xirr",
+                    (dates, amounts),
+                    py_dict!(py, "guess" => None::<f64>)
+                );
+                let explicit: Option<f64> =
+                    pyxirr_call!(py, "xirr", (dates, amounts), py_dict!(py, "guess" => 0.1));
+                for (mode, rate) in [("omitted", omitted), ("none", none), ("explicit", explicit)] {
+                    let rate =
+                        rate.unwrap_or_else(|| panic!("missing root for j={j}, {mode}, {scale}"));
+                    assert!(rate.is_finite() && rate > -1.0);
+                    let relative_error = ((rate - expected) / expected).abs();
+                    assert!(relative_error < 1e-12, "j={j}, {mode}, {scale}: {rate} vs {expected}");
+                }
+            }
+        }
+    });
+}
+
+#[rstest]
+#[case(None)]
+#[case(Some(0.1))]
+fn test_xirr_large_rate_from_ordinary_guesses(#[case] guess: Option<f64>) {
+    Python::with_gil(|py| {
+        let dates = ["2021-01-01", "2022-01-01", "2023-01-01"];
+        let expected = 2f64.powi(25) - 1.0;
+        for scale in [2f64.powi(-600), 1.0, 2f64.powi(600)] {
+            let amounts = [-2f64.powi(-25) * scale, scale, 2f64.powi(-40) * scale];
+            let rate: Option<f64> =
+                pyxirr_call!(py, "xirr", (dates, amounts), py_dict!(py, "guess" => guess));
+            let rate = rate.unwrap();
+            assert!(rate.is_finite() && ((rate - expected) / expected).abs() < 1e-12);
+        }
+    });
+}
+
+#[rstest]
 #[case(3.0, 2.0)]
 #[case(11.0, 10.0)]
 #[case(7.0, 5.0)]

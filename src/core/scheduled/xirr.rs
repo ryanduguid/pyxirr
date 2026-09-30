@@ -88,6 +88,29 @@ where
             }
             return f64::NAN;
         }
+        // At large rates, evaluation noise can leave Newton cycling above
+        // RATE_TOL. Refine only inside a narrow, sign-qualified neighbourhood.
+        let step = 1e-12 * x.abs();
+        if delta.abs() < step && value.abs() < 1e-3 {
+            let lo = x - step.min((1.0 + x) / 2.0);
+            let hi = x + step;
+            if lo > -1.0 && lo < x && hi > x && hi.is_finite() {
+                let (f_lo, f_hi) = (fd(lo).0, fd(hi).0);
+                let clear = |v: f64| v.is_finite() && v.abs() > value.abs();
+                // The stall check's sampled-sign heuristic applies here too.
+                if clear(f_lo) && clear(f_hi) && (f_lo < 0.0) != (f_hi < 0.0) {
+                    let rate = brentq(&|r| fd(r).0, lo, hi, 100);
+                    if rate.is_finite()
+                        && rate > -1.0
+                        && rate >= lo
+                        && rate <= hi
+                        && fd(rate).0.abs() < 1e-3
+                    {
+                        return rate;
+                    }
+                }
+            }
+        }
         x = next;
     }
     f64::NAN
