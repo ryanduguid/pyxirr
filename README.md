@@ -3,6 +3,11 @@
 [![pypi](https://img.shields.io/pypi/v/pyxirr.svg)](https://pypi.org/project/pyxirr/)
 [![versions](https://img.shields.io/pypi/pyversions/pyxirr.svg)](https://pypi.org/project/pyxirr/)
 
+**Fork status**
+
+[![Fork code quality](https://app.codacy.com/project/badge/Grade/e024a4ed37394bbaa5599af02439a4d7?branch=main)](https://app.codacy.com/gh/ryanduguid/pyxirr/dashboard)
+[![Fork CI](https://github.com/ryanduguid/pyxirr/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/ryanduguid/pyxirr/actions/workflows/ci.yaml)
+
 # PyXIRR
 
 Rust-powered collection of financial functions.
