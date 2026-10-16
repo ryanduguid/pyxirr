@@ -15,7 +15,7 @@
   const implCodes = { rust: 1, scipy: 2, python: 3 };
 
   const lastBenches = _.last(benches)["benches"].map((bench) => {
-    let [_, impl, sample_size] = bench.name.split("_");
+    let [, impl, sample_size] = bench.name.split("_");
     bench.impl = impl;
     bench.sample_size = sample_size;
     bench.implCode = implCodes[impl];
@@ -37,7 +37,7 @@
       y: _.map(impl, (x) => x.value / 1e9), // convert from ns to sec
       name: impl[0].impl,
       type: "bar",
-      text: _.map(impl, (x, i) => {
+      text: _.map(impl, (x) => {
         let duration = formatDuration(x);
 
         if (x.impl != "rust") {
