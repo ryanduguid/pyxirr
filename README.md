@@ -1,12 +1,12 @@
-[![rust-lang.org](https://img.shields.io/badge/Made%20with-Rust-red?style=flat&labelColor=000000&color=66023C)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/github/license/Anexen/pyxirr.svg?style=flat&labelColor=000000&color=66023C)](https://github.com/Anexen/pyxirr/blob/master/LICENSE)
-[![pypi](https://img.shields.io/pypi/v/pyxirr.svg?style=flat&labelColor=000000&color=66023C)](https://pypi.org/project/pyxirr/)
-[![versions](https://img.shields.io/pypi/pyversions/pyxirr.svg?style=flat&labelColor=000000&color=66023C)](https://pypi.org/project/pyxirr/)
+<div align="center">
+
+[![rust-lang.org](https://img.shields.io/badge/Made%20with-Rust-red?style=flat&labelColor=000000&color=66023C)](https://www.rust-lang.org/) [![License](https://img.shields.io/github/license/Anexen/pyxirr.svg?style=flat&labelColor=000000&color=66023C)](https://github.com/Anexen/pyxirr/blob/master/LICENSE) [![pypi](https://img.shields.io/pypi/v/pyxirr.svg?style=flat&labelColor=000000&color=66023C)](https://pypi.org/project/pyxirr/) [![versions](https://img.shields.io/pypi/pyversions/pyxirr.svg?style=flat&labelColor=000000&color=66023C)](https://pypi.org/project/pyxirr/)
 
 **Fork status**
 
-[![Fork code quality](https://img.shields.io/codacy/grade/e024a4ed37394bbaa5599af02439a4d7/main?style=flat&labelColor=000000)](https://app.codacy.com/gh/ryanduguid/pyxirr/dashboard)
-[![Fork CI](https://img.shields.io/github/actions/workflow/status/ryanduguid/pyxirr/ci.yaml?branch=main&label=CI&style=flat&labelColor=000000)](https://github.com/ryanduguid/pyxirr/actions/workflows/ci.yaml)
+[![Fork code quality](https://img.shields.io/codacy/grade/e024a4ed37394bbaa5599af02439a4d7/main?style=flat&labelColor=000000)](https://app.codacy.com/gh/ryanduguid/pyxirr/dashboard) [![Fork CI](https://img.shields.io/github/actions/workflow/status/ryanduguid/pyxirr/ci.yaml?branch=main&label=CI&style=flat&labelColor=000000)](https://github.com/ryanduguid/pyxirr/actions/workflows/ci.yaml)
+
+</div>
 
 # PyXIRR
 
